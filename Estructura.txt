@@ -1,0 +1,12 @@
+src/
+├── app/              # Rutas y páginas (el corazón de Next.js)
+│   ├── (auth)/       # Grupo de rutas para login/registro
+│   ├── chat/         # Ruta para los mensajes
+│   └── profile/      # Ruta para ver/editar perfil
+├── components/       # Componentes reutilizables (Botones, Cards, Inputs)
+│   ├── ui/           # Componentes básicos (el diseño base)
+│   └── shared/       # Componentes que se usan en varias páginas
+├── lib/              # Configuraciones de terceros (Supabase client)
+├── services/         # Funciones que llaman a la DB (getMatches, sendMessage)
+├── types/            # Definiciones de TypeScript (interfaces de Usuario, Match)
+└── utils/            # Funciones de ayuda (formatear fechas, validar correo uni)
