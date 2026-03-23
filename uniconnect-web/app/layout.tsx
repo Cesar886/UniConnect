@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UniConnect",
-  description: "Conecta con tu universidad",
+  title: "Tinder UM",
+  description: "Conecta con alumnos de la Universidad de la Montaña",
 };
 
 export default function RootLayout({
