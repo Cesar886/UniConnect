@@ -11,9 +11,9 @@ interface Alumno {
   edad: number
   pais: string
   residencia: string
-  plan: string
-  modalidad: string
-  tipo_alumno: string
+  plan_id: number | null
+  tipo_id: number | null
+  modalidad_id: number | null
 }
 
 export default function Home() {
@@ -151,15 +151,21 @@ export default function Home() {
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full bg-pink-100 px-3 py-1 text-sm font-medium text-pink-700">
-                {alumno.plan}
-              </span>
-              <span className="rounded-full bg-purple-100 px-3 py-1 text-sm font-medium text-purple-700">
-                {alumno.modalidad}
-              </span>
-              <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
-                {alumno.tipo_alumno}
-              </span>
+              {alumno.plan_id && (
+                <span className="rounded-full bg-pink-100 px-3 py-1 text-sm font-medium text-pink-700">
+                  Plan #{alumno.plan_id}
+                </span>
+              )}
+              {alumno.modalidad_id && (
+                <span className="rounded-full bg-purple-100 px-3 py-1 text-sm font-medium text-purple-700">
+                  Modalidad #{alumno.modalidad_id}
+                </span>
+              )}
+              {alumno.tipo_id && (
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+                  Tipo #{alumno.tipo_id}
+                </span>
+              )}
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-gray-600">
