@@ -33,7 +33,7 @@ const INTERESES_CATEGORIAS = [
 ]
 
 export default function ProfilePage() {
-  const { userProfile, updateProfile, matches, logout } = useApp()
+  const { userProfile, updateProfile, logout } = useApp()
   const router = useRouter()
   
   // Estado para controlar el modo de vista (Visualización vs Edición)
