@@ -148,6 +148,14 @@ export default function Home() {
     }
   }, [currentIndex, alumnos.length, loading, matchData, myMatricula, fetchAlumnosFromDB])
 
+  // Retry automático si no hay perfiles al cargar
+  useEffect(() => {
+    if (!loading && myMatricula && alumnos.length === 0) {
+      const timer = setTimeout(() => fetchAlumnosFromDB(), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [loading, myMatricula, alumnos.length, fetchAlumnosFromDB])
+
   const alumno = alumnos[currentIndex]
 
   if (loading) {
@@ -224,9 +232,15 @@ export default function Home() {
 
   if (!alumno) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 flex-col font-sans">
-        <div className="inline-block h-14 w-14 animate-spin rounded-full border-[5px] border-pink-100 border-t-pink-500 mb-6 drop-shadow-md"></div>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 flex-col font-sans gap-4">
+        <div className="inline-block h-14 w-14 animate-spin rounded-full border-[5px] border-pink-100 border-t-pink-500 mb-2 drop-shadow-md"></div>
         <p className="text-xl text-gray-400 font-bold tracking-widest uppercase animate-pulse">Cargando más perfiles...</p>
+        <button
+          onClick={fetchAlumnosFromDB}
+          className="mt-2 px-6 py-3 rounded-full bg-pink-500 text-white font-bold hover:bg-pink-600 transition-colors"
+        >
+          Reintentar
+        </button>
       </div>
     )
   }
