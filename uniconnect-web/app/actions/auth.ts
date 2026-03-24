@@ -16,8 +16,6 @@ export async function registerUser(formData: FormData) {
   const bio = formData.get('bio') as string;
   const intereses = formData.get('intereses') as string;
 
-  // 1. VALIDACIONES SEVERAS EN EL BACKEND (Por seguridad)
-  
   if (!matricula || !/^\d{7}$/.test(matricula)) {
     return { success: false, error: 'La matrícula debe ser un número exacto de 7 dígitos.' };
   }
@@ -30,7 +28,6 @@ export async function registerUser(formData: FormData) {
     return { success: false, error: 'Password inválido (mínimo 6 caracteres).' };
   }
 
-  // 2. LÓGICA DE INSERCIÓN 
   try {
     const birthDate = new Date(fecha_nac);
     const today = new Date();
@@ -68,5 +65,50 @@ export async function registerUser(formData: FormData) {
       return { success: false, error: 'Vaya. Alguien ya se registró con esta Matrícula o Correo. 🕵️‍♂️' };
     }
     return { success: false, error: 'Ocurrió un error en el servidor.' };
+  }
+}
+
+export async function loginUser(formData: FormData) {
+  const identificador = formData.get('identificador') as string;
+  const password = formData.get('password') as string;
+
+  if (!identificador || !password) {
+    return { success: false, error: 'No dejes los campos en blanco.' };
+  }
+
+  try {
+    let query = '';
+    let values: any[] = [];
+
+    // Limpiamos los espacios en blanco accidentales
+    const cleanId = identificador.trim();
+
+    // Si son exactamente 7 dígitos, lo tratamos como Matrícula
+    if (/^\d{7}$/.test(cleanId)) {
+      query = `SELECT matricula, nombre, foto_perfil FROM alumnos WHERE matricula = $1 AND password_hash = $2`;
+      values = [parseInt(cleanId, 10), password];
+    } 
+    // De lo contrario, intentamos tratarlo como Correo
+    else if (cleanId.includes('@')) {
+      query = `SELECT matricula, nombre, foto_perfil FROM alumnos WHERE LOWER(email) = LOWER($1) AND password_hash = $2`;
+      values = [cleanId.toLowerCase(), password];
+    } 
+    // Si no es ni matrícula ni correo válido:
+    else {
+      return { success: false, error: 'Debes escribir tu matrícula (7 números) o tu correo institucional completo.' };
+    }
+
+    const result = await pool.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return { success: false, error: 'Datos incorrectos. Verifica tu contraseña o identificador.' };
+    }
+
+    const { matricula, nombre, foto_perfil } = result.rows[0];
+    return { success: true, user: { matricula, nombre, foto_perfil } };
+
+  } catch (error: any) {
+    console.error('Error in loginUser:', error);
+    return { success: false, error: 'Ocurrió un error conectando al servidor.' };
   }
 }
