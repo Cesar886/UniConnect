@@ -228,6 +228,27 @@ export async function registerUser(formData: FormData) {
   }
 }
 
+export async function loginWithGoogle(email: string) {
+  if (!email) return { success: false, error: 'No se recibió correo de Google.' };
+
+  try {
+    const result = await pool.query(
+      `SELECT matricula, nombre, foto_perfil FROM alumnos WHERE LOWER(email) = LOWER($1)`,
+      [email.toLowerCase()]
+    );
+
+    if (result.rows.length === 0) {
+      return { success: false, error: 'No encontramos una cuenta con ese correo de Google. Regístrate primero.' };
+    }
+
+    const { matricula, nombre, foto_perfil } = result.rows[0];
+    return { success: true, user: { matricula, nombre, foto_perfil } };
+  } catch (error: any) {
+    console.error('Error in loginWithGoogle:', error);
+    return { success: false, error: 'Ocurrió un error conectando al servidor.' };
+  }
+}
+
 export async function loginUser(formData: FormData) {
   const identificador = formData.get('identificador') as string;
   const password = formData.get('password') as string;
