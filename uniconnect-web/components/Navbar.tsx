@@ -2,22 +2,42 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-
-const navItems = [
-  { href: '/', label: 'Inicio', icon: HomeIcon },
-  { href: '/matches', label: 'Matches', icon: HeartIcon },
-//  { href: '/chat', label: 'Chat', icon: ChatIcon }, // Removing Chat tab temporarily or keep it? We'll keep it as requested originally.
-  { href: '/profile', label: 'Perfil', icon: UserIcon },
-]
+import { useEffect, useState } from 'react'
+import { useApp } from '@/context/AppContext'
+import { getUnreadCount } from '@/app/actions/chat'
+import { getSocket } from '@/lib/socket'
 
 export default function Navbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { userProfile } = useApp()
+  const [unread, setUnread] = useState(0)
 
-  // No mostrar navbar en login/register, o cuando estamos DENTRO de un chat con id
+  useEffect(() => {
+    if (!userProfile.matricula) return
+
+    const socket = getSocket()
+    socket.emit('register', userProfile.matricula)
+
+    // Carga inicial
+    getUnreadCount(userProfile.matricula).then(count => setUnread(count))
+
+    // Escuchar actualizaciones en tiempo real
+    const onUnreadUpdate = (count: number) => {
+      setUnread(count)
+    }
+
+    socket.on('unread:update', onUnreadUpdate)
+
+    return () => {
+      socket.off('unread:update', onUnreadUpdate)
+    }
+  }, [userProfile.matricula])
+
+  // No mostrar navbar en login/register, o dentro de un chat
   if (
-     pathname === '/login' || 
-     pathname === '/register' || 
+     pathname === '/login' ||
+     pathname === '/register' ||
      pathname === '/auth' ||
      (pathname === '/chat' && searchParams.get('id'))
   ) {
@@ -27,21 +47,45 @@ export default function Navbar() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
       <div className="max-w-lg mx-auto flex justify-around items-center h-16">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
-                isActive ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <item.icon active={isActive} />
-              <span className="text-xs font-medium">{item.label}</span>
-            </Link>
-          )
-        })}
+        {/* Inicio */}
+        <Link
+          href="/"
+          className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
+            pathname === '/' ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <HomeIcon active={pathname === '/'} />
+          <span className="text-xs font-medium">Inicio</span>
+        </Link>
+
+        {/* Matches con badge en tiempo real */}
+        <Link
+          href="/matches"
+          className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors relative ${
+            pathname === '/matches' ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <div className="relative">
+            <HeartIcon active={pathname === '/matches'} />
+            {unread > 0 && (
+              <span className="absolute -top-1.5 -right-2.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-pink-500 px-1 text-[10px] font-black text-white shadow-md shadow-pink-500/40 animate-in zoom-in duration-200">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+          </div>
+          <span className="text-xs font-medium">Matches</span>
+        </Link>
+
+        {/* Perfil */}
+        <Link
+          href="/profile"
+          className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
+            pathname === '/profile' ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <UserIcon active={pathname === '/profile'} />
+          <span className="text-xs font-medium">Perfil</span>
+        </Link>
       </div>
     </nav>
   )
@@ -60,14 +104,6 @@ function HeartIcon({ active }: { active: boolean }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-    </svg>
-  )
-}
-
-function ChatIcon({ active }: { active: boolean }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
     </svg>
   )
 }

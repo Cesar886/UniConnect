@@ -13,7 +13,9 @@ interface RealMatch {
   age: number
   career: string
   lastMessage?: string
-  unread?: number
+  lastMessageTime?: string
+  lastSenderId?: number
+  unread: number
 }
 
 export default function MatchesPage() {
@@ -24,15 +26,18 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<RealMatch[]>([])
   const [loading, setLoading] = useState(true)
 
+  const fetchMatches = async () => {
+    if (!myMatricula) return
+    const data = await getMatches(myMatricula)
+    setMatches(data || [])
+    setLoading(false)
+  }
+
   useEffect(() => {
-    if (myMatricula) {
-      getMatches(myMatricula).then(data => {
-        setMatches(data || [])
-        setLoading(false)
-      })
-    } else {
-      setLoading(false)
-    }
+    fetchMatches()
+    // Refresh matches every 10 seconds
+    const interval = setInterval(fetchMatches, 10000)
+    return () => clearInterval(interval)
   }, [myMatricula])
 
   if (loading) {
@@ -44,6 +49,10 @@ export default function MatchesPage() {
       </div>
     )
   }
+
+  // Separar: matches nuevos (sin mensajes) y con conversación
+  const newMatches = matches.filter(m => !m.lastMessage)
+  const conversations = matches.filter(m => m.lastMessage)
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] pb-24 font-sans relative overflow-hidden">
@@ -73,92 +82,110 @@ export default function MatchesPage() {
       {matches.length > 0 ? (
         <div className="max-w-lg mx-auto px-4 pt-6 relative z-10">
 
-          {/* Círculos de Matches Nuevos (Estilo Historias de Instagram) */}
-          <div className="mb-10">
-            <div className="flex items-center justify-between ml-1 mb-4">
-              <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                Destacados
-              </h2>
+          {/* Círculos de Matches Nuevos (sin conversación aún) */}
+          {newMatches.length > 0 && (
+            <div className="mb-10">
+              <div className="flex items-center justify-between ml-1 mb-4">
+                <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">
+                  Nuevos Matches
+                </h2>
+              </div>
+              <div className="flex gap-4 overflow-x-auto pb-4 pt-1 scrollbar-hide -mx-4 px-4 snap-x">
+                {newMatches.map((match) => (
+                  <button
+                    key={`circle-${match.match_id}`}
+                    onClick={() => router.push(`/chat?id=${match.match_id}`)}
+                    className="flex-shrink-0 group flex flex-col items-center snap-start"
+                  >
+                    <div className="relative w-[85px] h-[85px] rounded-full p-[3px] bg-gradient-to-tr from-amber-300 via-pink-500 to-violet-600 group-hover:scale-105 transition-all duration-300 ease-spring shadow-lg shadow-pink-200/50">
+                      <div className="w-full h-full rounded-full overflow-hidden bg-white border-2 border-white">
+                        {match.photo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={match.photo} alt={match.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-gray-50 to-gray-200 flex items-center justify-center">
+                            <span className="text-2xl font-black text-gray-400">{match.name.charAt(0)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[13px] text-center mt-2.5 text-gray-700 font-bold w-20 truncate">
+                      {match.name.split(' ')[0]}
+                    </p>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-4 overflow-x-auto pb-4 pt-1 scrollbar-hide -mx-4 px-4 snap-x">
-              {matches.map((match) => (
-                <button
-                  key={`circle-${match.match_id}`}
-                  onClick={() => router.push(`/chat?id=${match.match_id}`)}
-                  className="flex-shrink-0 group flex flex-col items-center snap-start"
-                >
-                  {/* Anillo de Gradiente Animado */}
-                  <div className="relative w-[85px] h-[85px] rounded-full p-[3px] bg-gradient-to-tr from-amber-300 via-pink-500 to-violet-600 group-hover:scale-105 transition-all duration-300 ease-spring shadow-lg shadow-pink-200/50">
-                    <div className="w-full h-full rounded-full overflow-hidden bg-white border-2 border-white">
+          )}
+
+          {/* Conversaciones */}
+          {conversations.length > 0 && (
+            <>
+              <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 mb-4">
+                Mensajes
+              </h2>
+              <div className="flex flex-col gap-3">
+                {conversations.map((match) => (
+                  <button
+                    key={`msg-${match.match_id}`}
+                    onClick={() => router.push(`/chat?id=${match.match_id}`)}
+                    className="group relative flex items-center bg-white/60 backdrop-blur-lg p-4 rounded-3xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-white hover:bg-white transition-all duration-300 active:scale-[0.98] w-full text-left overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-50/0 via-pink-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+
+                    <div className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 shadow-md mr-4 border-2 border-white bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white">
                       {match.photo ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={match.photo} alt={match.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                        <img src={match.photo} alt={match.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-gray-50 to-gray-200 flex items-center justify-center">
-                          <span className="text-2xl font-black text-gray-400">{match.name.charAt(0)}</span>
-                        </div>
+                        <span className="text-xl font-black">{match.name.charAt(0)}</span>
                       )}
                     </div>
-                  </div>
-                  <p className="text-[13px] text-center mt-2.5 text-gray-700 font-bold w-full truncate">
-                    {match.name.split(' ')[0]}
-                  </p>
-                </button>
-              ))}
+
+                    <div className="flex-1 overflow-hidden z-10">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <h3 className={`font-extrabold text-[17px] truncate tracking-tight ${match.unread > 0 ? 'text-gray-900' : 'text-gray-800'}`}>
+                          {match.name}
+                        </h3>
+                        {match.lastMessageTime && (
+                          <span className={`text-[11px] font-bold ml-2 shrink-0 ${match.unread > 0 ? 'text-pink-500' : 'text-gray-400'}`}>
+                            {match.lastMessageTime}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-bold tracking-widest text-violet-500 mb-1 truncate uppercase">{match.career}</p>
+                      <p className={`text-[14px] truncate ${match.unread > 0 ? 'font-bold text-gray-800' : 'font-medium text-gray-500'}`}>
+                        {match.lastSenderId === myMatricula ? 'Tú: ' : ''}{match.lastMessage}
+                      </p>
+                    </div>
+
+                    <div className="pl-3 flex flex-col items-end justify-center shrink-0 z-10 gap-2">
+                      {match.unread > 0 && (
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-pink-500 text-[11px] font-black text-white shadow-md">
+                          {match.unread}
+                        </span>
+                      )}
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors group-hover:translate-x-1 duration-300">
+                        <path fillRule="evenodd" d="M16.28 11.47a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 0 1-1.06-1.06L14.69 12 7.72 5.03a.75.75 0 0 1 1.06-1.06l7.5 7.5Z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Si solo tiene matches nuevos sin conversación, mostrar hint */}
+          {conversations.length === 0 && newMatches.length > 0 && (
+            <div className="text-center py-10">
+              <p className="text-gray-400 text-sm font-medium">Toca un match para empezar a platicar</p>
             </div>
-          </div>
-
-          {/* Grid de Conversaciones */}
-          <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 mb-4">
-            Mensajes Recientes
-          </h2>
-          <div className="flex flex-col gap-3">
-            {matches.map((match) => (
-              <button
-                key={`msg-${match.match_id}`}
-                onClick={() => router.push(`/chat?id=${match.match_id}`)}
-                className="group relative flex items-center bg-white/60 backdrop-blur-lg p-4 rounded-3xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-white hover:bg-white transition-all duration-300 active:scale-[0.98] w-full text-left overflow-hidden"
-              >
-                {/* Glow on hover */}
-                <div className="absolute inset-0 bg-gradient-to-r from-pink-50/0 via-pink-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-
-                <div className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 shadow-md mr-4 border-2 border-white bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white">
-                  {match.photo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={match.photo} alt={match.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xl font-black">{match.name.charAt(0)}</span>
-                  )}
-                  {/* Green dot directly on avatar for online status */}
-                  <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-green-400 border-2 border-white rounded-full"></div>
-                </div>
-                
-                <div className="flex-1 overflow-hidden z-10">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    <h3 className="font-extrabold text-gray-900 text-[17px] truncate tracking-tight">
-                      {match.name}
-                    </h3>
-                  </div>
-                  <p className="text-[11px] font-bold tracking-widest text-violet-500 mb-1 truncate uppercase">{match.career}</p>
-                  <p className="text-[14px] font-medium text-gray-500 truncate group-hover:text-gray-700 transition-colors">
-                    {match.lastMessage ? match.lastMessage : "✨ ¡Haz hecho match! Salúdala"}
-                  </p>
-                </div>
-
-                <div className="pl-3 flex flex-col items-end justify-center shrink-0 z-10">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors group-hover:translate-x-1 duration-300">
-                    <path fillRule="evenodd" d="M16.28 11.47a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 0 1-1.06-1.06L14.69 12 7.72 5.03a.75.75 0 0 1 1.06-1.06l7.5 7.5Z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </button>
-            ))}
-          </div>
+          )}
         </div>
       ) : (
-        /* Empty state Premium */
+        /* Empty state */
         <div className="flex flex-col items-center justify-center px-6 pt-32 text-center relative z-10">
           <div className="relative w-32 h-32 mb-8 group cursor-pointer" onClick={() => router.push('/')}>
-            {/* Pulsing rings */}
             <div className="absolute inset-0 bg-pink-200 rounded-full animate-ping opacity-20"></div>
             <div className="absolute inset-2 bg-pink-100 rounded-full animate-ping opacity-40 animation-delay-1000"></div>
             <div className="relative w-full h-full bg-gradient-to-tr from-rose-100 to-violet-100 border-2 border-white rounded-full flex items-center justify-center shadow-xl shadow-pink-100/50 group-hover:scale-105 transition-transform duration-500">
@@ -166,8 +193,6 @@ export default function MatchesPage() {
                  <path d="m11.645 20.91-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" />
                </svg>
             </div>
-            
-            {/* Sparkles */}
             <svg className="absolute -top-4 -right-4 w-8 h-8 text-yellow-400 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l2.4 7.6H22l-6.4 4.8 2.4 7.6-6.4-4.8-6.4 4.8 2.4-7.6-6.4-4.8h7.6z"/>
             </svg>
