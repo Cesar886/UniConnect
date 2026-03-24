@@ -28,8 +28,7 @@ export default function LoginPage() {
 
     if (res.success && res.user?.matricula) {
       updateProfile({ name: res.user?.nombre || 'Usuario' })
-      login(res.user.matricula)
-      setLoading(false)
+      await login(res.user.matricula)
       router.push('/')
     } else {
       setError(res.error || 'Ocurrió un error al iniciar sesión.')
@@ -110,7 +109,7 @@ export default function LoginPage() {
 
           <div className="mt-8 text-center pt-6 border-t border-gray-100">
             <p className="text-gray-500 text-sm font-medium">
-              ¿Eres nuevo en la UM?{' '}
+              ¿Eres nuevo en Tinder UM?{' '}
               <Link href="/register" className="text-pink-500 font-bold hover:text-pink-600 transition-colors">
                 Regístrate aquí
               </Link>
