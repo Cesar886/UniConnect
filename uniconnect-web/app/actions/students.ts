@@ -25,6 +25,7 @@ export async function getStudents(currentMatricula?: number) {
       FROM alumnos
       WHERE matricula != $1
         AND password_hash IS NOT NULL
+        AND matricula NOT IN (SELECT swiped_id FROM swipes WHERE swiper_id = $1)
     `;
 
     const values: any[] = [currentMatricula];

@@ -6,7 +6,7 @@ export async function swipeUser(swiperId: number, swipedId: number, liked: boole
   try {
     await pool.query(
       `INSERT INTO swipes (swiper_id, swiped_id, liked) VALUES ($1, $2, $3)
-       ON CONFLICT (swiper_id, swiped_id) DO UPDATE SET liked = EXCLUDED.liked, created_at = CURRENT_TIMESTAMP`,
+       ON CONFLICT (swiper_id, swiped_id) DO NOTHING`,
       [swiperId, swipedId, liked]
     );
 
@@ -46,24 +46,23 @@ export async function getMatches(matricula: number) {
         ON s1.swiper_id = s2.swiped_id
         AND s1.swiped_id = s2.swiper_id
       JOIN alumnos a ON a.matricula = s1.swiped_id
-      -- Último mensaje entre ambos
+      -- Último mensaje entre ambos (excluyendo borrados)
       LEFT JOIN LATERAL (
         SELECT text, TO_CHAR(created_at, 'HH24:MI') as time, sender_id, created_at
         FROM messages
-        WHERE (sender_id = $1 AND receiver_id = s1.swiped_id)
-           OR (sender_id = s1.swiped_id AND receiver_id = $1)
+        WHERE ((sender_id = $1 AND receiver_id = s1.swiped_id)
+           OR (sender_id = s1.swiped_id AND receiver_id = $1))
+          AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 1
       ) lm ON TRUE
-      -- Mensajes no leídos (del otro hacia mí)
+      -- Mensajes no leídos (usando columna status)
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int as count
         FROM messages
         WHERE sender_id = s1.swiped_id AND receiver_id = $1
-          AND created_at > COALESCE(
-            (SELECT MAX(created_at) FROM messages WHERE sender_id = $1 AND receiver_id = s1.swiped_id),
-            '1970-01-01'
-          )
+          AND deleted_at IS NULL
+          AND COALESCE(status, 'sent') != 'read'
       ) unread ON TRUE
       WHERE s1.swiper_id = $1 AND s1.liked = TRUE AND s2.liked = TRUE
       ORDER BY lm.created_at DESC NULLS LAST
