@@ -115,7 +115,6 @@ export default function RegisterResponsivePage() {
   const validateStepAndNext = () => {
     setError('')
     
-    // Validaciones de seguridad para el PASO 1
     if (step === 1) {
       if (!/^\d{7}$/.test(formData.matricula)) {
         setError('Tu matrícula debe contener exactamente 7 números continuos.')
@@ -131,7 +130,6 @@ export default function RegisterResponsivePage() {
       }
     }
 
-    // Validaciones extras para el PASO 2
     if (step === 2) {
       if (!formData.fecha_nac) {
         setError('Por favor ingresa tu fecha de nacimiento.')
@@ -144,7 +142,6 @@ export default function RegisterResponsivePage() {
       }
     }
 
-    // Si todo está correcto, avanza
     setStep(s => s + 1)
   }
 
@@ -157,7 +154,6 @@ export default function RegisterResponsivePage() {
     setError('')
     setLoading(true)
 
-    // Doble verificación al enviar para evitar hackers
     if (!/^\d{7}$/.test(formData.matricula) || !formData.email.endsWith('@alumno.um.edu.mx')) {
       setError('Se detectó información alterada.')
       setLoading(false)
@@ -184,9 +180,9 @@ export default function RegisterResponsivePage() {
 
     const res = await registerUser(data)
 
-    if (res.success) {
+    if (res.success && res.matricula) {
       updateProfile({ name: formData.nombre })
-      login()
+      login(res.matricula)
       setLoading(false)
       router.push('/')
     } else {
@@ -228,7 +224,6 @@ export default function RegisterResponsivePage() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-0 lg:p-8">
         <div className="w-full h-full lg:h-[800px] max-w-xl bg-white lg:rounded-3xl lg:shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex flex-col relative overflow-hidden ring-1 ring-gray-100/50">
           
-          {/* HEADER */}
           <div className="px-8 pt-12 pb-2">
             <div className="flex items-center mb-8">
               {step > 1 ? (
@@ -258,17 +253,14 @@ export default function RegisterResponsivePage() {
             </div>
           </div>
 
-          {/* MENSAJE DE ERROR CUIDADOSO */}
           {error && (
             <div className="mx-8 mt-2 p-4 bg-red-50/80 border-l-4 border-red-500 rounded-r-xl text-red-700 text-sm font-semibold animate-in slide-in-from-top-2">
               ⚠️ {error}
             </div>
           )}
 
-          {/* CONTENIDO DEL FORMULARIO */}
           <div className="flex-1 px-8 pt-4 overflow-y-auto pb-40 scrollbar-hide">
             
-            {/* === PASO 1 === */}
             {step === 1 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">Regístrate</h1>
@@ -277,21 +269,20 @@ export default function RegisterResponsivePage() {
                 <div className="space-y-6">
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Matrícula Escolar (7 dígitos)</label>
-                    <input type="text" maxLength={7} inputMode="numeric" name="matricula" value={formData.matricula} onChange={handleChange} placeholder="Ej. 1190000" className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
+                    <input type="text" maxLength={7} inputMode="numeric" name="matricula" value={formData.matricula} onChange={handleChange} placeholder="Ej. 1190000" className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Correo Institucional Oficial</label>
-                    <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="estudiante@alumno.um.edu.mx" className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
+                    <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="estudiante@alumno.um.edu.mx" className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Contraseña</label>
-                    <input type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Crea una contraseña segura" className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
+                    <input type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Crea una contraseña segura" className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* === PASO 2 === */}
             {step === 2 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">Sobre ti</h1>
@@ -300,21 +291,20 @@ export default function RegisterResponsivePage() {
                 <div className="space-y-6">
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Nombre(s)</label>
-                    <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
+                    <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Apellidos</label>
-                    <input type="text" name="apellidos" value={formData.apellidos} onChange={handleChange} placeholder="Tus apellidos" className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
+                    <input type="text" name="apellidos" value={formData.apellidos} onChange={handleChange} placeholder="Tus apellidos" className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Fecha de Nacimiento</label>
-                    <input type="date" name="fecha_nac" value={formData.fecha_nac} onChange={handleChange} className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium text-gray-700" />
+                    <input type="date" name="fecha_nac" value={formData.fecha_nac} onChange={handleChange} className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium" />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* === PASO 3 === */}
             {step === 3 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">La U</h1>
@@ -323,7 +313,7 @@ export default function RegisterResponsivePage() {
                 <div className="space-y-6">
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Escuela / Carrera</label>
-                    <select name="carrera" value={formData.carrera} onChange={handleChange} className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium text-gray-700 appearance-none">
+                    <select name="carrera" value={formData.carrera} onChange={handleChange} className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium appearance-none">
                       <option value="" disabled>Selecciona tu carrera</option>
                       {CARRERAS.map((c, index) => (
                         <option key={index} value={c}>{c}</option>
@@ -334,18 +324,18 @@ export default function RegisterResponsivePage() {
                   {formData.carrera === 'Otro' && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                       <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">¿Cuál carrera?</label>
-                      <input type="text" name="carrera_custom" value={formData.carrera_custom} onChange={handleChange} placeholder="Escribe tu carrera" className="w-full px-5 py-4 text-lg bg-pink-50/50 border-2 border-pink-100 focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-pink-300 font-medium text-gray-800" />
+                      <input type="text" name="carrera_custom" value={formData.carrera_custom} onChange={handleChange} placeholder="Escribe tu carrera" className="text-gray-900 w-full px-5 py-4 text-lg bg-pink-50/50 border-2 border-pink-100 focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-pink-300 font-medium" />
                     </div>
                   )}
                   
                   <div className="grid grid-cols-2 gap-4 mt-2">
                     <div className="col-span-2">
                       <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Semestre Actual</label>
-                      <input type="number" name="semestre" value={formData.semestre} onChange={handleChange} min="1" max="14" placeholder="1er semestre" className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
+                      <input type="number" name="semestre" value={formData.semestre} onChange={handleChange} min="1" max="14" placeholder="1er semestre" className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium" />
                     </div>
                     <div>
                       <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Yo soy</label>
-                      <select name="genero" value={formData.genero} onChange={handleChange} className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium text-gray-700 appearance-none">
+                      <select name="genero" value={formData.genero} onChange={handleChange} className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium appearance-none">
                         <option value="" disabled>Elegir</option>
                         <option value="Mujer">Mujer</option>
                         <option value="Hombre">Hombre</option>
@@ -354,7 +344,7 @@ export default function RegisterResponsivePage() {
                     </div>
                     <div>
                       <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Me interesa</label>
-                      <select name="genero_interes" value={formData.genero_interes} onChange={handleChange} className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium text-gray-700 appearance-none">
+                      <select name="genero_interes" value={formData.genero_interes} onChange={handleChange} className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all font-medium appearance-none">
                         <option value="" disabled>Elegir</option>
                         <option value="Hombres">Hombres</option>
                         <option value="Mujeres">Mujeres</option>
@@ -366,7 +356,6 @@ export default function RegisterResponsivePage() {
               </div>
             )}
 
-            {/* === PASO 4 === */}
             {step === 4 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">Tus Gustos</h1>
@@ -375,7 +364,7 @@ export default function RegisterResponsivePage() {
                 <div className="space-y-8">
                   <div>
                     <label className="block text-sm font-bold text-gray-600 ml-1 mb-2">Biografía (Lo que los demás leerán)</label>
-                    <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} placeholder="Ej: Me encanta ir por un café después de clases y jugar videojuegos..." className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium resize-none shadow-sm" />
+                    <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} placeholder="Ej: Me encanta ir por un café después de clases y jugar videojuegos..." className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-transparent focus:bg-white focus:border-pink-500 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium resize-none shadow-sm" />
                   </div>
 
                   <div className="space-y-6 pb-6 border-t border-gray-100 pt-6">
@@ -414,7 +403,7 @@ export default function RegisterResponsivePage() {
 
                     {showOtroInteres && (
                       <div className="animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
-                        <input type="text" name="intereses_custom" value={formData.intereses_custom} onChange={handleChange} placeholder="Ej: Ajedrez, Robótica, Surf..." className="w-full px-5 py-4 text-lg bg-gray-50 border-2 border-gray-200 focus:bg-white focus:border-gray-800 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium shadow-sm" />
+                        <input type="text" name="intereses_custom" value={formData.intereses_custom} onChange={handleChange} placeholder="Ej: Ajedrez, Robótica, Surf..." className="text-gray-900 w-full px-5 py-4 text-lg bg-gray-50 border-2 border-gray-200 focus:bg-white focus:border-gray-800 rounded-2xl outline-none transition-all placeholder:text-gray-400 font-medium shadow-sm" />
                         <p className="text-xs text-gray-400 mt-2 ml-1">Si tienes varios, sepáralos con comas.</p>
                       </div>
                     )}
@@ -425,7 +414,6 @@ export default function RegisterResponsivePage() {
 
           </div>
 
-          {/* FOOTER */}
           <div className="absolute lg:relative bottom-0 w-full p-8 lg:bg-white bg-gradient-to-t from-white via-white to-transparent pt-16 lg:pt-8 mt-auto rounded-b-3xl">
             {step < 4 ? (
               <button 

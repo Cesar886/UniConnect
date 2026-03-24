@@ -1,9 +1,11 @@
 'use client'
 
-import { createContext, useContext, useState, ReactNode, useCallback } from 'react'
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react'
 import { Profile, Match, Message, mockProfiles } from '@/data/mockData'
+import { getProfile } from '@/app/actions/students'
 
 interface UserProfile {
+  matricula: number | null
   name: string
   age: number
   career: string
@@ -11,12 +13,13 @@ interface UserProfile {
   bio: string
   interests: string[]
   photo: string
+  photos: string[]
 }
 
 interface AppContextType {
   // Auth
   isLoggedIn: boolean
-  login: () => void
+  login: (matricula?: number) => void
   logout: () => void
 
   // User profile
@@ -43,20 +46,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [matches, setMatches] = useState<Match[]>([])
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    name: 'Daniel',
-    age: 21,
-    career: 'Ingeniería en Sistemas',
-    semester: 6,
+    matricula: null,
+    name: 'Cargando...',
+    age: 18,
+    career: '...',
+    semester: 1,
     bio: '',
     interests: [],
     photo: '',
+    photos: ['', '', ''],
   })
 
-  const login = () => setIsLoggedIn(true)
+  useEffect(() => {
+    // Basic client-side hidration
+    if (typeof window !== 'undefined') {
+      const savedMatricula = localStorage.getItem('uniconnect_session_id')
+      if (savedMatricula) {
+        setIsLoggedIn(true)
+        const matNum = parseInt(savedMatricula, 10)
+        
+        getProfile(matNum).then((data: any) => {
+          if (data) {
+             setUserProfile(prev => ({
+               ...prev,
+               matricula: matNum,
+               name: data.nombre,
+               age: data.edad || 18,
+               career: data.carrera || '',
+               semester: data.semestre || 1,
+               bio: data.bio || '',
+               interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
+               photo: data.foto_perfil || '',
+               photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+             }))
+          } else {
+             setUserProfile(prev => ({...prev, matricula: matNum}))
+          }
+        })
+      }
+    }
+  }, [])
+
+  const login = async (matricula?: number) => {
+    setIsLoggedIn(true)
+    if (matricula) {
+      localStorage.setItem('uniconnect_session_id', String(matricula))
+      const data: any = await getProfile(matricula)
+      if (data) {
+         setUserProfile(prev => ({
+           ...prev,
+           matricula,
+           name: data.nombre,
+           age: data.edad || 18,
+           career: data.carrera || '',
+           semester: data.semestre || 1,
+           bio: data.bio || '',
+           interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
+           photo: data.foto_perfil || '',
+           photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+         }))
+      } else {
+         setUserProfile(prev => ({...prev, matricula}))
+      }
+    }
+  }
+
   const logout = () => {
     setIsLoggedIn(false)
     setMatches([])
     setCurrentIndex(0)
+    setUserProfile(prev => ({...prev, matricula: null}))
+    localStorage.removeItem('uniconnect_session_id')
   }
 
   const updateProfile = (updates: Partial<UserProfile>) => {
