@@ -4,8 +4,10 @@ import { useState, useEffect, useRef, Suspense, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getProfile } from '@/app/actions/students'
-import { getMessages } from '@/app/actions/chat'
-import { getSocket } from '@/lib/socket'
+import { getMessages, isMatch } from '@/app/actions/chat'
+import { getSocket, registerUser, emitOrQueue, onConnectionChange } from '@/lib/socket'
+
+const MAX_MESSAGE_LENGTH = 2000
 
 interface ChatMessage {
   id: number
@@ -13,15 +15,24 @@ interface ChatMessage {
   receiver_id: number
   text: string
   time: string
-  status: 'sent' | 'delivered' | 'read'
+  status: 'sending' | 'sent' | 'delivered' | 'read'
   created_at?: string
   edited_at?: string | null
+  tempId?: string
 }
 
 // Status check icons
 function StatusIcon({ status }: { status: string }) {
+  if (status === 'sending') {
+    // Clock icon
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5 inline-block ml-1 text-white/40">
+        <circle cx="12" cy="12" r="9" />
+        <path strokeLinecap="round" d="M12 7v5l3 3" />
+      </svg>
+    )
+  }
   if (status === 'sent') {
-    // Single check
     return (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-3.5 h-3.5 inline-block ml-1 text-white/50">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -29,7 +40,6 @@ function StatusIcon({ status }: { status: string }) {
     )
   }
   if (status === 'delivered') {
-    // Double check gray
     return (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-4 h-3.5 inline-block ml-1 text-white/50">
         <path strokeLinecap="round" strokeLinejoin="round" d="M1 13l4 4L15 7" />
@@ -38,7 +48,6 @@ function StatusIcon({ status }: { status: string }) {
     )
   }
   if (status === 'read') {
-    // Double check blue
     return (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-4 h-3.5 inline-block ml-1 text-blue-200">
         <path strokeLinecap="round" strokeLinejoin="round" d="M1 13l4 4L15 7" />
@@ -47,6 +56,32 @@ function StatusIcon({ status }: { status: string }) {
     )
   }
   return null
+}
+
+// Connection status banner
+function ConnectionBanner({ status }: { status: string }) {
+  if (status === 'connected') return null
+  return (
+    <div className={`sticky top-[64px] z-30 text-center py-2 text-xs font-bold tracking-wider uppercase transition-all duration-300 ${
+      status === 'connecting'
+        ? 'bg-amber-50 text-amber-600 border-b border-amber-100'
+        : 'bg-red-50 text-red-500 border-b border-red-100'
+    }`}>
+      <div className="flex items-center justify-center gap-2">
+        {status === 'connecting' ? (
+          <>
+            <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            Reconectando...
+          </>
+        ) : (
+          <>
+            <div className="w-2 h-2 bg-red-400 rounded-full" />
+            Sin conexión
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function ChatContent() {
@@ -63,18 +98,37 @@ function ChatContent() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isTyping, setIsTyping] = useState(false)
+  const [notMatch, setNotMatch] = useState(false)
   const [peerOnline, setPeerOnline] = useState(false)
+  const [peerLastSeen, setPeerLastSeen] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ msgId: number; x: number; y: number } | null>(null)
   const [editingMsg, setEditingMsg] = useState<{ id: number; text: string } | null>(null)
   const [editText, setEditText] = useState('')
+  const [connectionStatus, setConnectionStatus] = useState<string>('connecting')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const tempIdCounter = useRef(0)
 
   const peerIdParam = searchParams.get('id')
   const peerId = peerIdParam ? parseInt(peerIdParam, 10) : null
 
   const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].filter(Boolean) : []
   const interesList = peerProfile && peerProfile.intereses ? peerProfile.intereses.split(',').map((i: string) => i.trim()).filter(Boolean) : []
+
+  // Format last seen
+  const formatLastSeen = (dateStr: string | null) => {
+    if (!dateStr) return 'Desconectado'
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    const diffHrs = Math.floor(diffMs / 3600000)
+
+    if (diffMin < 1) return 'Últ. vez hace un momento'
+    if (diffMin < 60) return `Últ. vez hace ${diffMin} min`
+    if (diffHrs < 24) return `Últ. vez hace ${diffHrs}h`
+    return `Últ. vez ${date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
+  }
 
   // Check if message is within 20 min edit/delete window
   const isWithinEditWindow = (msg: ChatMessage) => {
@@ -84,39 +138,72 @@ function ChatContent() {
     return (now - created) < 20 * 60 * 1000
   }
 
-  // 1. Cargar perfil e historial
+  // Character count
+  const charCount = newMessage.length
+  const isOverLimit = charCount > MAX_MESSAGE_LENGTH
+
+  // 1. Load profile and history (only if mutual match)
   useEffect(() => {
     if (!myMatricula || !peerId) return
-    getProfile(peerId).then(data => { if (data) setPeerProfile(data) })
-    getMessages(myMatricula, peerId).then(data => { setMessages(data || []); setLoading(false) })
+    isMatch(myMatricula, peerId).then(matched => {
+      if (!matched) {
+        setNotMatch(true)
+        setLoading(false)
+        return
+      }
+      getProfile(peerId).then(data => { if (data) setPeerProfile(data) })
+      getMessages(myMatricula, peerId).then(data => { setMessages(data || []); setLoading(false) })
+    })
   }, [myMatricula, peerId])
 
-  // 2. WebSocket: escuchar mensajes, typing, online, status, edit, delete
+  // 2. Connection status listener
+  useEffect(() => {
+    return onConnectionChange((status) => {
+      setConnectionStatus(status)
+    })
+  }, [])
+
+  // 3. WebSocket: listen for messages, typing, online, status, edit, delete
   useEffect(() => {
     if (!myMatricula || !peerId) return
 
     const socket = getSocket()
 
-    // Registrar usuario
-    socket.emit('register', myMatricula)
+    // Register user (handles reconnection automatically)
+    registerUser(myMatricula)
 
-    // Marcar como leído
+    // Mark as read
     socket.emit('chat:read', { myId: myMatricula, peerId })
 
-    // Verificar si el peer está online
+    // Check if peer is online
     socket.emit('user:check', peerId)
 
-    // Nuevo mensaje en tiempo real
+    // Get last seen if offline
+    socket.emit('user:lastSeen', peerId, (res: any) => {
+      if (res?.lastSeen) setPeerLastSeen(res.lastSeen)
+    })
+
+    // New message in real time
     const onNewMessage = (msg: ChatMessage) => {
       if (
         (msg.sender_id === myMatricula && msg.receiver_id === peerId) ||
         (msg.sender_id === peerId && msg.receiver_id === myMatricula)
       ) {
         setMessages(prev => {
+          // Replace optimistic message by tempId
+          if (msg.tempId) {
+            const idx = prev.findIndex(m => m.tempId === msg.tempId)
+            if (idx !== -1) {
+              const updated = [...prev]
+              updated[idx] = { ...msg, tempId: undefined }
+              return updated
+            }
+          }
+          // Avoid duplicates by id
           if (prev.some(m => m.id === msg.id)) return prev
           return [...prev, msg]
         })
-        // Si recibí un mensaje, marcar como leído
+        // If I received a message, mark as read
         if (msg.sender_id === peerId) {
           socket.emit('chat:read', { myId: myMatricula, peerId })
         }
@@ -155,11 +242,23 @@ function ChatContent() {
 
     // Online status
     const onUserOnline = ({ matricula, online }: { matricula: number; online: boolean }) => {
-      if (matricula === peerId) setPeerOnline(online)
+      if (matricula === peerId) {
+        setPeerOnline(online)
+        if (!online) {
+          // Refresh last seen when they go offline
+          setPeerLastSeen(new Date().toISOString())
+        } else {
+          setPeerLastSeen(null)
+        }
+      }
     }
 
     // Error
-    const onError = ({ error }: { error: string }) => {
+    const onError = ({ error, tempId }: { error: string; tempId?: string }) => {
+      // Remove failed optimistic message
+      if (tempId) {
+        setMessages(prev => prev.filter(m => m.tempId !== tempId))
+      }
       alert(error)
     }
 
@@ -193,56 +292,71 @@ function ChatContent() {
     }
   }, [contextMenu])
 
-  // 3. Auto-scroll
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping])
 
-  // Enviar mensaje via WebSocket
+  // Send message with optimistic UI + ack
   const handleSend = useCallback(() => {
-    if (!newMessage.trim() || !myMatricula || !peerId) return
+    if (!newMessage.trim() || !myMatricula || !peerId || isOverLimit) return
     const textToSend = newMessage.trim()
+    const tempId = `temp_${Date.now()}_${tempIdCounter.current++}`
 
-    const socket = getSocket()
-    socket.emit('message:send', { senderId: myMatricula, receiverId: peerId, text: textToSend })
-    socket.emit('typing:stop', { senderId: myMatricula, receiverId: peerId })
-
+    // Optimistic message
+    const optimisticMsg: ChatMessage = {
+      id: -1,
+      sender_id: myMatricula,
+      receiver_id: peerId,
+      text: textToSend,
+      time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      status: 'sending',
+      created_at: new Date().toISOString(),
+      tempId,
+    }
+    setMessages(prev => [...prev, optimisticMsg])
     setNewMessage('')
     setShowEmojis(false)
-  }, [newMessage, myMatricula, peerId])
+
+    // Send via socket (or queue if offline)
+    emitOrQueue('message:send', { receiverId: peerId, text: textToSend, tempId }, (res: any) => {
+      if (res?.error) {
+        // Remove optimistic on ack error
+        setMessages(prev => prev.filter(m => m.tempId !== tempId))
+      }
+    })
+
+    emitOrQueue('typing:stop', { receiverId: peerId })
+  }, [newMessage, myMatricula, peerId, isOverLimit])
 
   // Edit message
   const handleEdit = useCallback(() => {
     if (!editingMsg || !editText.trim()) return
-    const socket = getSocket()
-    socket.emit('message:edit', { messageId: editingMsg.id, senderId: myMatricula, newText: editText.trim() })
+    emitOrQueue('message:edit', { messageId: editingMsg.id, newText: editText.trim() })
     setEditingMsg(null)
     setEditText('')
-  }, [editingMsg, editText, myMatricula])
+  }, [editingMsg, editText])
 
   // Delete message
   const handleDelete = useCallback((msgId: number) => {
-    const socket = getSocket()
-    socket.emit('message:delete', { messageId: msgId, senderId: myMatricula })
+    emitOrQueue('message:delete', { messageId: msgId })
     setContextMenu(null)
-  }, [myMatricula])
+  }, [])
 
-  // Manejar typing indicator
+  // Typing indicator
   const handleInputChange = (text: string) => {
     setNewMessage(text)
     if (!myMatricula || !peerId) return
 
-    const socket = getSocket()
-
     if (text.trim()) {
-      socket.emit('typing:start', { senderId: myMatricula, receiverId: peerId })
+      emitOrQueue('typing:start', { receiverId: peerId })
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = setTimeout(() => {
-        socket.emit('typing:stop', { senderId: myMatricula, receiverId: peerId })
+        emitOrQueue('typing:stop', { receiverId: peerId })
       }, 2000)
     } else {
-      socket.emit('typing:stop', { senderId: myMatricula, receiverId: peerId })
+      emitOrQueue('typing:stop', { receiverId: peerId })
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     }
   }
@@ -261,6 +375,19 @@ function ChatContent() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FDFDFD] flex-col font-sans">
         <div className="inline-block h-10 w-10 animate-spin rounded-full border-[4px] border-pink-100 border-t-pink-500"></div>
+      </div>
+    )
+  }
+
+  if (notMatch) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FDFDFD] flex-col font-sans px-6 text-center">
+        <p className="text-6xl mb-6">🚫</p>
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">No tienes match con esta persona</h2>
+        <p className="text-gray-500 text-sm mb-8">Solo puedes chatear con tus matches mutuos.</p>
+        <button onClick={() => router.push('/matches')} className="px-8 py-3 bg-gray-900 text-white rounded-full font-bold shadow-lg hover:-translate-y-0.5 transition-all active:scale-95">
+          Ir a Matches
+        </button>
       </div>
     )
   }
@@ -378,7 +505,7 @@ function ChatContent() {
           ) : peerOnline ? (
             <p className="text-[12px] text-green-500 font-bold tracking-widest uppercase">En línea</p>
           ) : (
-            <p className="text-[12px] text-gray-400 font-bold tracking-widest uppercase">Desconectado</p>
+            <p className="text-[12px] text-gray-400 font-medium">{formatLastSeen(peerLastSeen)}</p>
           )}
         </div>
         <button onClick={() => setShowProfile(true)} className="p-2 hover:bg-white/50 rounded-full transition-colors">
@@ -387,6 +514,9 @@ function ChatContent() {
           </svg>
         </button>
       </div>
+
+      {/* Connection status banner */}
+      <ConnectionBanner status={connectionStatus} />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-8 space-y-4 pb-32 scrollbar-hide z-10">
@@ -425,10 +555,10 @@ function ChatContent() {
 
         {messages.map((msg) => {
           const isMe = msg.sender_id === myMatricula
-          const canModify = isMe && isWithinEditWindow(msg)
+          const canModify = isMe && isWithinEditWindow(msg) && msg.status !== 'sending'
           return (
             <div
-              key={msg.id}
+              key={msg.tempId || msg.id}
               className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300 group`}
               onContextMenu={(e) => handleMessageContext(e, msg)}
             >
@@ -467,7 +597,7 @@ function ChatContent() {
               <div
                 className={`max-w-[80%] md:max-w-[70%] px-5 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ${
                   isMe
-                    ? 'bg-gradient-to-br from-pink-500 via-rose-500 to-fuchsia-600 text-white rounded-3xl rounded-br-[4px]'
+                    ? `bg-gradient-to-br from-pink-500 via-rose-500 to-fuchsia-600 text-white rounded-3xl rounded-br-[4px] ${msg.status === 'sending' ? 'opacity-70' : ''}`
                     : 'bg-white/80 backdrop-blur-xl text-gray-800 border border-white rounded-[24px] rounded-bl-[4px]'
                 }`}
               >
@@ -552,22 +682,28 @@ function ChatContent() {
               onChange={(e) => setEditText(e.target.value)}
               className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-[15px] font-medium text-gray-800 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100 resize-none transition-all"
               rows={3}
+              maxLength={MAX_MESSAGE_LENGTH}
               autoFocus
             />
-            <div className="flex justify-end gap-3 mt-4">
-              <button
-                onClick={() => { setEditingMsg(null); setEditText('') }}
-                className="px-5 py-2.5 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleEdit}
-                disabled={!editText.trim() || editText.trim() === editingMsg.text}
-                className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-pink-500 to-violet-500 shadow-lg shadow-pink-500/20 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:shadow-none disabled:translate-y-0"
-              >
-                Guardar
-              </button>
+            <div className="flex justify-between items-center mt-2">
+              <span className={`text-xs font-medium ${editText.length > MAX_MESSAGE_LENGTH * 0.9 ? 'text-red-400' : 'text-gray-300'}`}>
+                {editText.length}/{MAX_MESSAGE_LENGTH}
+              </span>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setEditingMsg(null); setEditText('') }}
+                  className="px-5 py-2.5 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleEdit}
+                  disabled={!editText.trim() || editText.trim() === editingMsg.text || editText.length > MAX_MESSAGE_LENGTH}
+                  className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-pink-500 to-violet-500 shadow-lg shadow-pink-500/20 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:shadow-none disabled:translate-y-0"
+                >
+                  Guardar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -611,18 +747,29 @@ function ChatContent() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
           </button>
-          <textarea
-            value={newMessage}
-            onChange={(e) => handleInputChange(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder="Mensaje..."
-            rows={1}
-            className="flex-1 bg-transparent px-2 py-3 max-h-32 text-gray-800 outline-none resize-none text-[15px] font-medium placeholder-gray-400 scrollbar-hide"
-            autoFocus
-          />
+          <div className="flex-1 relative">
+            <textarea
+              value={newMessage}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+              placeholder="Mensaje..."
+              rows={1}
+              maxLength={MAX_MESSAGE_LENGTH + 100}
+              className="w-full bg-transparent px-2 py-3 max-h-32 text-gray-800 outline-none resize-none text-[15px] font-medium placeholder-gray-400 scrollbar-hide"
+              autoFocus
+            />
+            {/* Character counter - shows near limit */}
+            {charCount > MAX_MESSAGE_LENGTH * 0.8 && (
+              <span className={`absolute -top-6 right-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                isOverLimit ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-400'
+              }`}>
+                {charCount}/{MAX_MESSAGE_LENGTH}
+              </span>
+            )}
+          </div>
           <button
             onClick={handleSend}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || isOverLimit}
             className="w-11 h-11 shrink-0 bg-gradient-to-br from-pink-500 to-violet-500 rounded-full flex items-center justify-center shadow-lg shadow-pink-500/30 hover:-translate-y-0.5 transition-all active:scale-90 disabled:opacity-0 disabled:scale-50 disabled:hidden"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white ml-0.5" viewBox="0 0 24 24" fill="currentColor">

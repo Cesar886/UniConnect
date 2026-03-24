@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getMatches } from '@/app/actions/match'
+import { getSocket, registerUser, onConnectionChange } from '@/lib/socket'
 
 interface RealMatch {
   match_id: number
@@ -26,19 +27,43 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<RealMatch[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async () => {
     if (!myMatricula) return
     const data = await getMatches(myMatricula)
     setMatches(data || [])
     setLoading(false)
-  }
+  }, [myMatricula])
 
+  // Initial load + WebSocket real-time updates
   useEffect(() => {
     fetchMatches()
-    // Refresh matches every 10 seconds
-    const interval = setInterval(fetchMatches, 10000)
-    return () => clearInterval(interval)
-  }, [myMatricula])
+
+    if (!myMatricula) return
+
+    const socket = getSocket()
+    registerUser(myMatricula)
+
+    // Re-fetch when server tells us matches changed (new message, delete, etc.)
+    const onMatchesUpdate = () => {
+      fetchMatches()
+    }
+
+    // Also re-fetch on reconnect
+    const unsubConnection = onConnectionChange((status) => {
+      if (status === 'connected') fetchMatches()
+    })
+
+    socket.on('matches:update', onMatchesUpdate)
+
+    // Fallback polling every 30s (much less aggressive than 10s)
+    const interval = setInterval(fetchMatches, 30000)
+
+    return () => {
+      socket.off('matches:update', onMatchesUpdate)
+      unsubConnection()
+      clearInterval(interval)
+    }
+  }, [myMatricula, fetchMatches])
 
   if (loading) {
     return (

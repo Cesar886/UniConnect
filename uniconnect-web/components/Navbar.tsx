@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { getUnreadCount } from '@/app/actions/chat'
-import { getSocket } from '@/lib/socket'
+import { getSocket, registerUser, onConnectionChange } from '@/lib/socket'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -17,20 +17,28 @@ export default function Navbar() {
     if (!userProfile.matricula) return
 
     const socket = getSocket()
-    socket.emit('register', userProfile.matricula)
+    registerUser(userProfile.matricula)
 
-    // Carga inicial
+    // Initial load
     getUnreadCount(userProfile.matricula).then(count => setUnread(count))
 
-    // Escuchar actualizaciones en tiempo real
+    // Listen for real-time updates
     const onUnreadUpdate = (count: number) => {
       setUnread(count)
     }
+
+    // Re-fetch on reconnect
+    const unsubConnection = onConnectionChange((status) => {
+      if (status === 'connected' && userProfile.matricula) {
+        getUnreadCount(userProfile.matricula).then(count => setUnread(count))
+      }
+    })
 
     socket.on('unread:update', onUnreadUpdate)
 
     return () => {
       socket.off('unread:update', onUnreadUpdate)
+      unsubConnection()
     }
   }, [userProfile.matricula])
 
