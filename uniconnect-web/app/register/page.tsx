@@ -69,6 +69,15 @@ const INTERESES_CATEGORIAS = [
   }
 ]
 
+type ExistingAlumno = {
+  matricula: number
+  nombre: string
+  apellidos: string
+  carrera?: string | null
+  genero?: string | null
+  edad?: number | null
+}
+
 export default function RegisterResponsivePage() {
   const router = useRouter()
   const { login, updateProfile } = useApp()
@@ -78,7 +87,7 @@ export default function RegisterResponsivePage() {
   const [error, setError] = useState('')
 
   // Datos del alumno encontrado y de dónde viene
-  const [existingAlumno, setExistingAlumno] = useState<any>(null)
+  const [existingAlumno, setExistingAlumno] = useState<ExistingAlumno | null>(null)
   const [alumnoSource, setAlumnoSource] = useState<'alumnos' | 'alumnos_db' | null>(null)
 
   const [formData, setFormData] = useState({
@@ -345,6 +354,12 @@ export default function RegisterResponsivePage() {
   const handleSubmitPadron = async () => {
     setError('')
     setLoading(true)
+
+    if (!existingAlumno) {
+      setError('No se encontró información del alumno. Intenta verificar tu correo nuevamente.')
+      setLoading(false)
+      return
+    }
 
     const data = new FormData()
     data.append('matricula', extractedMatricula)
