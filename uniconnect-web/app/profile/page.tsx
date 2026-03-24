@@ -119,7 +119,7 @@ export default function ProfilePage() {
       } else {
         alert('Error guardando la foto.')
       }
-    } catch (err) { }
+    } catch { }
 
     setIsUploading(false)
     setUploadingSlot(null)
