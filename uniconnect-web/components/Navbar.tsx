@@ -1,20 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 const navItems = [
   { href: '/', label: 'Inicio', icon: HomeIcon },
   { href: '/matches', label: 'Matches', icon: HeartIcon },
-  { href: '/chat', label: 'Chat', icon: ChatIcon },
+//  { href: '/chat', label: 'Chat', icon: ChatIcon }, // Removing Chat tab temporarily or keep it? We'll keep it as requested originally.
   { href: '/profile', label: 'Perfil', icon: UserIcon },
 ]
 
 export default function Navbar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
 
-  // No mostrar navbar en login/register
-  if (pathname === '/login' || pathname === '/register' || pathname === '/auth') {
+  // No mostrar navbar en login/register, o cuando estamos DENTRO de un chat con id
+  if (
+     pathname === '/login' || 
+     pathname === '/register' || 
+     pathname === '/auth' ||
+     (pathname === '/chat' && searchParams.get('id'))
+  ) {
     return null
   }
 
