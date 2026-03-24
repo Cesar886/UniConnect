@@ -2,19 +2,19 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { useApp } from '@/context/AppContext'
 
 const navItems = [
-  { href: '/', label: 'Inicio', icon: HomeIcon },
+  { href: '/', label: 'Feed', icon: HomeIcon },
   { href: '/matches', label: 'Matches', icon: HeartIcon },
-//  { href: '/chat', label: 'Chat', icon: ChatIcon }, // Removing Chat tab temporarily or keep it? We'll keep it as requested originally.
   { href: '/profile', label: 'Perfil', icon: UserIcon },
 ]
 
 export default function Navbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { userProfile } = useApp()
 
-  // No mostrar navbar en login/register, o cuando estamos DENTRO de un chat con id
   if (
      pathname === '/login' || 
      pathname === '/register' || 
@@ -24,26 +24,31 @@ export default function Navbar() {
     return null
   }
 
+  const adminItem = { href: '/admin', label: 'Panel', icon: AdminIcon }
+  const displayItems = userProfile?.is_admin ? [...navItems, adminItem] : navItems
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
-      <div className="max-w-lg mx-auto flex justify-around items-center h-16">
-        {navItems.map((item) => {
+    <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <nav className="bg-white/85 backdrop-blur-xl border border-white/50 shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-full px-8 py-3.5 flex items-center gap-10 pointer-events-auto">
+        {displayItems.map((item) => {
           const isActive = pathname === item.href
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
-                isActive ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
+              className={`relative flex flex-col items-center gap-1 transition-all duration-300 ${
+                isActive ? 'text-[#ba0034] scale-110' : 'text-gray-400 hover:text-[#e51245] hover:scale-105'
               }`}
             >
               <item.icon active={isActive} />
-              <span className="text-xs font-medium">{item.label}</span>
+              {isActive && (
+                <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-gradient-to-tr from-[#ba0034] to-[#e51245] rounded-full shadow-sm"></span>
+              )}
             </Link>
           )
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   )
 }
 
@@ -58,16 +63,8 @@ function HomeIcon({ active }: { active: boolean }) {
 
 function HeartIcon({ active }: { active: boolean }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-7 h-7">
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-    </svg>
-  )
-}
-
-function ChatIcon({ active }: { active: boolean }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
     </svg>
   )
 }
@@ -76,6 +73,14 @@ function UserIcon({ active }: { active: boolean }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    </svg>
+  )
+}
+
+function AdminIcon({ active }: { active: boolean }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
     </svg>
   )
 }

@@ -46,7 +46,7 @@ export async function getStudents(currentMatricula?: number) {
 
 export async function getProfile(matricula: number) {
   try {
-    const res = await pool.query(`SELECT matricula, nombre, apellidos, carrera, semestre, edad, bio, intereses, genero, foto_perfil, foto2, foto3 FROM alumnos WHERE matricula = $1`, [matricula]);
+    const res = await pool.query(`SELECT matricula, nombre, apellidos, carrera, semestre, edad, bio, intereses, genero, foto_perfil, foto2, foto3, is_admin FROM alumnos WHERE matricula = $1`, [matricula]);
     return res.rows[0] || null;
   } catch (error) {
     console.error('Error fetching profile:', error);

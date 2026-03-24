@@ -14,6 +14,7 @@ interface UserProfile {
   interests: string[]
   photo: string
   photos: string[]
+  is_admin?: boolean
 }
 
 interface AppContextType {
@@ -55,6 +56,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     interests: [],
     photo: '',
     photos: ['', '', ''],
+    is_admin: false,
   })
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
                photo: data.foto_perfil || '',
                photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+               is_admin: data.is_admin || false,
              }))
           } else {
              setUserProfile(prev => ({...prev, matricula: matNum}))
@@ -104,6 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
            interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
            photo: data.foto_perfil || '',
            photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+           is_admin: data.is_admin || false,
          }))
       } else {
          setUserProfile(prev => ({...prev, matricula}))

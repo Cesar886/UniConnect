@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getProfile } from '@/app/actions/students'
 import { getMessages, sendMessage } from '@/app/actions/chat'
+import { createReport } from '@/app/actions/report'
 
 interface ChatMessage {
   id: number
@@ -27,6 +28,10 @@ function ChatContent() {
   const [showProfile, setShowProfile] = useState(false)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [showReport, setShowReport] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [isReporting, setIsReporting] = useState(false)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const peerIdParam = searchParams.get('id')
@@ -35,14 +40,12 @@ function ChatContent() {
   const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].filter(Boolean) : []
   const interesList = peerProfile && peerProfile.intereses ? peerProfile.intereses.split(',').map((i: string) => i.trim()).filter(Boolean) : []
 
-  // 1. Initial Load
   useEffect(() => {
     if (!myMatricula || !peerId) return
     getProfile(peerId).then(data => { if (data) setPeerProfile(data) })
     getMessages(myMatricula, peerId).then(data => { setMessages(data || []); setLoading(false) })
   }, [myMatricula, peerId])
 
-  // 2. Real-time Polling
   useEffect(() => {
     if (!myMatricula || !peerId || loading) return
     const interval = setInterval(() => {
@@ -53,7 +56,6 @@ function ChatContent() {
     return () => clearInterval(interval)
   }, [myMatricula, peerId, loading])
 
-  // 3. Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -67,6 +69,20 @@ function ChatContent() {
     const res = await sendMessage(myMatricula, peerId, textToSend)
     if (res.success) {
       getMessages(myMatricula, peerId).then(data => setMessages(data || []))
+    }
+  }
+
+  const handleReportAction = async () => {
+    if (!reportReason || !myMatricula || !peerId) return;
+    setIsReporting(true);
+    const res = await createReport(myMatricula, peerId, reportReason);
+    setIsReporting(false);
+    if (res.success) {
+      alert("Reporte enviado de forma anónima. Nuestro equipo de moderación lo revisará.");
+      setShowReport(false);
+      setReportReason('');
+    } else {
+      alert("Ocurrió un error al enviar el reporte: " + res.error);
     }
   }
 
@@ -89,6 +105,44 @@ function ChatContent() {
 
   return (
     <div className="min-h-[100dvh] bg-[#FDFDFD] flex flex-col font-sans relative">
+      
+      {/* REPORT MODAL */}
+      {showReport && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-black text-gray-900 mb-2">Reportar a {peerProfile.nombre}</h2>
+            <p className="text-sm text-gray-500 mb-4 font-medium">La seguridad es nuestra prioridad. Escoge un motivo para advertir a los administradores de la universidad.</p>
+            <select 
+              value={reportReason} 
+              onChange={e => setReportReason(e.target.value)} 
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-6 text-gray-700 outline-none font-medium"
+            >
+              <option value="">Selecciona un motivo...</option>
+              <option value="Acoso o lenguaje inapropiado">Acoso o lenguaje inapropiado</option>
+              <option value="Perfil Falso / Catfish">Perfil Falso / Catfish</option>
+              <option value="Spam / Publicidad">Spam o Publicidad comercial</option>
+              <option value="Comportamiento agresivo">Comportamiento peligroso</option>
+              <option value="Otro motivo">Otro motivo</option>
+            </select>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowReport(false)} 
+                className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleReportAction}
+                disabled={!reportReason || isReporting}
+                className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors flex justify-center items-center"
+              >
+                {isReporting ? 'Enviando...' : 'Enviar Reporte'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PERFIL MODAL */}
       {showProfile && peerProfile && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex flex-col justify-end md:items-center md:justify-center font-sans animate-in fade-in duration-300">
@@ -176,16 +230,17 @@ function ChatContent() {
           ) : (
              <span className="text-xl font-black text-white">{peerProfile.nombre.charAt(0)}</span>
           )}
-          {/* Green dot directly over avatar */}
           <div className="absolute border-2 border-white bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full shadow-sm"></div>
         </div>
         <div className="flex-1 overflow-hidden flex flex-col justify-center">
           <h2 onClick={() => setShowProfile(true)} className="font-extrabold text-gray-800 text-[17px] truncate leading-tight tracking-tight cursor-pointer">{peerProfile.nombre.split(' ')[0]}</h2>
-          <p className="text-[12px] text-green-500 font-bold tracking-widest uppercase">Escribiendo...</p>
+          <p className="text-[12px] text-green-500 font-bold tracking-widest uppercase">En Línea</p>
         </div>
-        <button className="p-2 hover:bg-white/50 rounded-full transition-colors opacity-50">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
+        
+        {/* REPORT BUTTON */}
+        <button onClick={() => setShowReport(true)} className="p-2 hover:bg-red-50 rounded-full transition-colors opacity-70 group bg-white shadow-sm border border-gray-100">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </button>
       </div>
