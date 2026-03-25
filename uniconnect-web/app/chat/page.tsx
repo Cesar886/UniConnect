@@ -4,8 +4,12 @@ import { useState, useEffect, useRef, Suspense, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getProfile } from '@/app/actions/students'
-import { getMessages, sendMessage } from '@/app/actions/chat'
+import { getMessages, sendMessage, isMatch } from '@/app/actions/chat'
 import { createReport } from '@/app/actions/report'
+import { getSocket, registerUser, emitOrQueue, onConnectionChange } from '@/lib/socket'
+import { safePhotoUrl } from '@/lib/sanitize'
+
+const MAX_MESSAGE_LENGTH = 2000
 
 interface ChatMessage {
   id: number
@@ -95,6 +99,12 @@ function ChatContent() {
   const [showProfile, setShowProfile] = useState(false)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [notMatch, setNotMatch] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
+  const [contextMenu, setContextMenu] = useState<{ msgId: number; x: number; y: number } | null>(null)
+  const [editingMsg, setEditingMsg] = useState<{ id: number; text: string } | null>(null)
+  const [editText, setEditText] = useState('')
   const [showReport, setShowReport] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [isReporting, setIsReporting] = useState(false)
@@ -125,7 +135,7 @@ function ChatContent() {
   useEffect(() => {
     if (!myMatricula || !peerId || loading) return
     const interval = setInterval(() => {
-      getMessages(myMatricula, peerId).then(data => {
+      getMessages(peerId).then(data => {
         setMessages(prev => (data.length !== prev.length ? data : prev))
       })
     }, 2000)
@@ -135,6 +145,20 @@ function ChatContent() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping])
+
+  const isWithinEditWindow = (msg: ChatMessage) => {
+    if (!msg.created_at) return false
+    return Date.now() - new Date(msg.created_at).getTime() < 20 * 60 * 1000
+  }
+
+  const charCount = newMessage.length
+  const isOverLimit = charCount > MAX_MESSAGE_LENGTH
+
+  const handleMessageContext = (e: React.MouseEvent, msg: ChatMessage) => {
+    if (msg.sender_id !== myMatricula) return
+    e.preventDefault()
+    setContextMenu({ msgId: msg.id, x: e.clientX, y: e.clientY })
+  }
 
   // Send message with optimistic UI + ack
   const handleSend = useCallback(() => {

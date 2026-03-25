@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useApp } from '@/context/AppContext'
+import { Suspense } from 'react'
 
 const navItems = [
   { href: '/', label: 'Feed', icon: HomeIcon },
@@ -10,7 +11,7 @@ const navItems = [
   { href: '/profile', label: 'Perfil', icon: UserIcon },
 ]
 
-export default function Navbar() {
+function NavbarContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { userProfile } = useApp()
@@ -49,6 +50,14 @@ export default function Navbar() {
         })}
       </nav>
     </div>
+  )
+}
+
+export default function Navbar() {
+  return (
+    <Suspense fallback={null}>
+      <NavbarContent />
+    </Suspense>
   )
 }
 

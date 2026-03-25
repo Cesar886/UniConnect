@@ -33,6 +33,7 @@ export default function Home() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [direction, setDirection] = useState<'left' | 'right' | null>(null)
   const [loading, setLoading] = useState(true)
+  const [swiping, setSwiping] = useState(false)
   const [likes, setLikes] = useState<number[]>([])
   const [matchData, setMatchData] = useState<Alumno | null>(null)
 

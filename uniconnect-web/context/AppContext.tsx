@@ -73,7 +73,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         })
       }
-    })
+    }
   }, [])
 
   const login = async (matricula?: number) => {
