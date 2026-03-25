@@ -3,11 +3,24 @@
 import { writeFile, mkdir, unlink } from 'fs/promises'
 import { join } from 'path'
 import pool from '@/lib/db'
+import { getSession } from '@/lib/session'
 
-export async function uploadProfilePhoto(matricula: number, slot: 1 | 2 | 3, formData: FormData) {
+export async function uploadProfilePhoto(slot: 1 | 2 | 3, formData: FormData) {
   try {
+    const session = await getSession()
+    if (!session) return { success: false, error: 'No autenticado' }
+    const matricula = session.matricula
+
     const file = formData.get('file') as File
     if (!file) return { success: false, error: 'No file provided' }
+
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!ALLOWED_MIME.includes(file.type)) {
+      return { success: false, error: 'Solo se permiten imágenes (jpg, png, webp, gif).' }
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: 'La imagen no puede superar 5 MB.' }
+    }
 
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
@@ -19,7 +32,13 @@ export async function uploadProfilePhoto(matricula: number, slot: 1 | 2 | 3, for
       // Ignorar si ya existe
     }
 
-    const ext = file.name.split('.').pop() || 'webp'
+    const MIME_TO_EXT: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    }
+    const ext = MIME_TO_EXT[file.type] ?? 'jpg'
     const fileName = `${matricula}-slot${slot}-${Date.now()}.${ext}`
     const path = join(uploadDir, fileName)
 
@@ -56,8 +75,12 @@ export async function uploadProfilePhoto(matricula: number, slot: 1 | 2 | 3, for
   }
 }
 
-export async function removeProfilePhoto(matricula: number, slot: 1 | 2 | 3) {
+export async function removeProfilePhoto(slot: 1 | 2 | 3) {
   try {
+    const session = await getSession()
+    if (!session) return { success: false }
+    const matricula = session.matricula
+
     const uploadDir = join(process.cwd(), 'public', 'uploads')
     const columnName = slot === 1 ? 'foto_perfil' : slot === 2 ? 'foto2' : 'foto3'
 

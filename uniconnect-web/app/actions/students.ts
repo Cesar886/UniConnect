@@ -1,9 +1,12 @@
 'use server'
 
 import pool from '@/lib/db';
+import { getSession } from '@/lib/session';
 
-export async function getStudents(currentMatricula?: number) {
+export async function getStudents() {
   try {
+    const session = await getSession();
+    const currentMatricula = session?.matricula;
     if (!currentMatricula) {
       // Sin sesión, devolver vacío
       return [];

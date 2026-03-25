@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getMatches } from '@/app/actions/match'
 import { getSocket, registerUser, onConnectionChange } from '@/lib/socket'
+import { safePhotoUrl } from '@/lib/sanitize'
 
 interface RealMatch {
   match_id: number
@@ -29,7 +30,7 @@ export default function MatchesPage() {
 
   const fetchMatches = useCallback(async () => {
     if (!myMatricula) return
-    const data = await getMatches(myMatricula)
+    const data = await getMatches()
     setMatches(data || [])
     setLoading(false)
   }, [myMatricula])
@@ -41,7 +42,7 @@ export default function MatchesPage() {
     if (!myMatricula) return
 
     const socket = getSocket()
-    registerUser(myMatricula)
+    registerUser()
 
     // Re-fetch when server tells us matches changed (new message, delete, etc.)
     const onMatchesUpdate = () => {
@@ -126,7 +127,7 @@ export default function MatchesPage() {
                       <div className="w-full h-full rounded-full overflow-hidden bg-white border-2 border-white">
                         {match.photo ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={match.photo} alt={match.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                          <img src={safePhotoUrl(match.photo)} alt={match.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-gray-50 to-gray-200 flex items-center justify-center">
                             <span className="text-2xl font-black text-gray-400">{match.name.charAt(0)}</span>
@@ -161,7 +162,7 @@ export default function MatchesPage() {
                     <div className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 shadow-md mr-4 border-2 border-white bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white">
                       {match.photo ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={match.photo} alt={match.name} className="w-full h-full object-cover" />
+                        <img src={safePhotoUrl(match.photo)} alt={match.name} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-xl font-black">{match.name.charAt(0)}</span>
                       )}

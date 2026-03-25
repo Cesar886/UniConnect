@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useApp } from '@/context/AppContext'
 import { useRouter } from 'next/navigation'
 import { uploadProfilePhoto, removeProfilePhoto } from '@/app/actions/upload'
+import { safePhotoUrl } from '@/lib/sanitize'
 
 const INTERESES_CATEGORIAS = [
   {
@@ -69,7 +70,7 @@ export default function ProfilePage() {
 
   const handleDeletePhoto = async (slot: 1 | 2 | 3) => {
     if (!userProfile.matricula) return
-    const res = await removeProfilePhoto(userProfile.matricula, slot)
+    const res = await removeProfilePhoto(slot)
     if (res.success) {
       const newPhotos = [...(userProfile.photos || ['', '', ''])]
       newPhotos[slot - 1] = ''
@@ -110,7 +111,7 @@ export default function ProfilePage() {
       const formData = new FormData()
       formData.append('file', compressedBlob, `photo.webp`)
       
-      const res = await uploadProfilePhoto(userProfile.matricula, uploadingSlot, formData)
+      const res = await uploadProfilePhoto(uploadingSlot, formData)
       
       if (res.success && res.photoUrl) {
         const newPhotos = [...(userProfile.photos || ['', '', ''])]
@@ -181,7 +182,7 @@ export default function ProfilePage() {
               <div className="w-full aspect-[4/5] bg-gradient-to-br from-pink-400 via-rose-400 to-violet-500 relative flex items-center justify-center overflow-hidden">
                 {userProfile.photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={userProfile.photo} alt="Mi Perfil" className="w-full h-full object-cover" />
+                  <img src={safePhotoUrl(userProfile.photo)} alt="Mi Perfil" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-white/40 text-9xl font-black tracking-tighter">
                     {name.charAt(0).toUpperCase()}
@@ -280,7 +281,7 @@ export default function ProfilePage() {
                     <div key={slot} className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gray-50 border-2 border-dashed border-gray-200 hover:border-pink-300 transition-colors group flex items-center justify-center">
                       {url ? (
                         <>
-                          <img src={url} alt={`Foto ${slot}`} className="w-full h-full object-cover" />
+                          <img src={safePhotoUrl(url)} alt={`Foto ${slot}`} className="w-full h-full object-cover" />
                           
                           {/* Botón Borrar (Esquina Sup Der) */}
                           <button 

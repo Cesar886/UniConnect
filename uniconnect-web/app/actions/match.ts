@@ -1,9 +1,14 @@
 'use server'
 
 import pool from '@/lib/db';
+import { getSession } from '@/lib/session';
 
-export async function swipeUser(swiperId: number, swipedId: number, liked: boolean) {
+export async function swipeUser(swipedId: number, liked: boolean) {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, isMatch: false };
+    const swiperId = session.matricula;
+
     await pool.query(
       `INSERT INTO swipes (swiper_id, swiped_id, liked) VALUES ($1, $2, $3)
        ON CONFLICT (swiper_id, swiped_id) DO NOTHING`,
@@ -28,8 +33,12 @@ export async function swipeUser(swiperId: number, swipedId: number, liked: boole
   }
 }
 
-export async function getMatches(matricula: number) {
+export async function getMatches() {
   try {
+    const session = await getSession();
+    if (!session) return [];
+    const matricula = session.matricula;
+
     const query = `
       SELECT
         a.matricula as match_id,

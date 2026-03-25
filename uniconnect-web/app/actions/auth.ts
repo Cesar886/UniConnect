@@ -1,6 +1,35 @@
 'use server'
 
-import pool from '@/lib/db';
+import pool from '@/lib/db'
+import { createSession, deleteSession, getSession } from '@/lib/session'
+import { OAuth2Client } from 'google-auth-library'
+import { headers } from 'next/headers'
+import { checkRateLimit } from '@/lib/ratelimit'
+
+// Obtiene la IP del cliente desde los headers de la petición
+async function getClientIp(): Promise<string> {
+  const h = await headers()
+  return (
+    h.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    h.get('x-real-ip') ??
+    'unknown'
+  )
+}
+
+function formatRetry(ms: number): string {
+  const min = Math.ceil(ms / 60000)
+  return min <= 1 ? '1 minuto' : `${min} minutos`
+}
+
+const googleClient = new OAuth2Client(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID)
+
+export async function getCurrentSession() {
+  return getSession()
+}
+
+export async function logoutAction() {
+  await deleteSession()
+}
 
 // Checa matrícula: primero en "alumnos" (ya registrado), luego en "alumnos_db" (padrón UM)
 export async function checkMatricula(matricula: number) {
@@ -70,6 +99,12 @@ export async function checkMatricula(matricula: number) {
 // Registro para alumno encontrado en alumnos_db (padrón UM)
 // Ya tenemos nombre, apellidos, genero, edad → solo falta lo demás
 export async function registerFromPadron(formData: FormData) {
+  const ip = await getClientIp()
+  const rl = checkRateLimit(`register:ip:${ip}`, 3, 60 * 60 * 1000) // 3 / hora
+  if (!rl.allowed) {
+    return { success: false, error: `Demasiados registros desde tu red. Intenta en ${formatRetry(rl.retryAfterMs)}.` }
+  }
+
   const matricula = formData.get('matricula') as string;
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
@@ -108,7 +143,9 @@ export async function registerFromPadron(formData: FormData) {
     ];
 
     const result = await pool.query(query, values);
-    return { success: true, matricula: result.rows[0].matricula };
+    const newMatricula = result.rows[0].matricula;
+    await createSession(newMatricula);
+    return { success: true, matricula: newMatricula };
   } catch (error: any) {
     console.error('Error registering from padron:', error);
     if (error.code === '23505') {
@@ -120,6 +157,12 @@ export async function registerFromPadron(formData: FormData) {
 
 // Registro para alumno que YA EXISTE en "alumnos" (solo falta poner contraseña)
 export async function registerExistingUser(formData: FormData) {
+  const ip = await getClientIp()
+  const rl = checkRateLimit(`register:ip:${ip}`, 3, 60 * 60 * 1000)
+  if (!rl.allowed) {
+    return { success: false, error: `Demasiados registros desde tu red. Intenta en ${formatRetry(rl.retryAfterMs)}.` }
+  }
+
   const matricula = formData.get('matricula') as string;
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
@@ -138,20 +181,18 @@ export async function registerExistingUser(formData: FormData) {
       [parseInt(matricula, 10)]
     );
 
-    if (check.rows.length === 0) {
-      return { success: false, error: 'Matrícula no encontrada.' };
+    if (check.rows.length === 0 || check.rows[0].password_hash) {
+      return { success: false, error: 'No es posible completar el registro con estos datos.' };
     }
 
-    if (check.rows[0].password_hash) {
-      return { success: false, error: 'Esta matrícula ya tiene cuenta. Intenta iniciar sesión.' };
-    }
-
+    const newMatricula = parseInt(matricula, 10);
     await pool.query(
       `UPDATE alumnos SET email = $1, password_hash = $2, genero_interes = COALESCE($3, genero_interes) WHERE matricula = $4`,
-      [email, password, genero_interes || null, parseInt(matricula, 10)]
+      [email, password, genero_interes || null, newMatricula]
     );
 
-    return { success: true, matricula: parseInt(matricula, 10) };
+    await createSession(newMatricula);
+    return { success: true, matricula: newMatricula };
   } catch (error: any) {
     console.error('Error registering existing user:', error);
     if (error.code === '23505') {
@@ -163,6 +204,12 @@ export async function registerExistingUser(formData: FormData) {
 
 // Registro para alumno completamente NUEVO (no existe en ninguna tabla)
 export async function registerUser(formData: FormData) {
+  const ip = await getClientIp()
+  const rl = checkRateLimit(`register:ip:${ip}`, 3, 60 * 60 * 1000)
+  if (!rl.allowed) {
+    return { success: false, error: `Demasiados registros desde tu red. Intenta en ${formatRetry(rl.retryAfterMs)}.` }
+  }
+
   const matricula = formData.get('matricula') as string;
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
@@ -218,7 +265,9 @@ export async function registerUser(formData: FormData) {
     ];
 
     const result = await pool.query(query, values);
-    return { success: true, matricula: result.rows[0].matricula };
+    const newMatricula = result.rows[0].matricula;
+    await createSession(newMatricula);
+    return { success: true, matricula: newMatricula };
   } catch (error: any) {
     console.error('Error inserting user:', error);
     if (error.code === '23505') {
@@ -228,24 +277,44 @@ export async function registerUser(formData: FormData) {
   }
 }
 
-export async function loginWithGoogle(email: string) {
-  if (!email) return { success: false, error: 'No se recibió correo de Google.' };
+export async function loginWithGoogle(credential: string) {
+  if (!credential) return { success: false, error: 'No se recibió token de Google.' }
+
+  // Rate limiting: 10 intentos / 5 min por IP
+  const ip = await getClientIp()
+  const byIp = checkRateLimit(`google:ip:${ip}`, 10, 5 * 60 * 1000)
+  if (!byIp.allowed) {
+    return { success: false, error: `Demasiados intentos. Intenta en ${formatRetry(byIp.retryAfterMs)}.` }
+  }
 
   try {
+    // Verificar la firma del id_token con la librería oficial de Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+    })
+    const payload = ticket.getPayload()
+    if (!payload?.email) {
+      return { success: false, error: 'Token de Google inválido.' }
+    }
+
+    const email = payload.email // email verificado por Google, no proviene del cliente
+
     const result = await pool.query(
       `SELECT matricula, nombre, foto_perfil FROM alumnos WHERE LOWER(email) = LOWER($1)`,
       [email.toLowerCase()]
-    );
+    )
 
     if (result.rows.length === 0) {
-      return { success: false, error: 'No encontramos una cuenta con ese correo de Google. Regístrate primero.' };
+      return { success: false, error: 'Credenciales incorrectas.' }
     }
 
-    const { matricula, nombre, foto_perfil } = result.rows[0];
-    return { success: true, user: { matricula, nombre, foto_perfil } };
+    const { matricula, nombre, foto_perfil } = result.rows[0]
+    await createSession(matricula)
+    return { success: true, user: { matricula, nombre, foto_perfil } }
   } catch (error: any) {
-    console.error('Error in loginWithGoogle:', error);
-    return { success: false, error: 'Ocurrió un error conectando al servidor.' };
+    console.error('Error in loginWithGoogle:', error)
+    return { success: false, error: 'Ocurrió un error conectando al servidor.' }
   }
 }
 
@@ -255,6 +324,21 @@ export async function loginUser(formData: FormData) {
 
   if (!identificador || !password) {
     return { success: false, error: 'No dejes los campos en blanco.' };
+  }
+
+  // Rate limiting: 5 intentos / 15 min por IP  +  5 intentos / 15 min por identificador
+  const ip = await getClientIp()
+  const WINDOW = 15 * 60 * 1000 // 15 minutos
+  const LIMIT = 5
+
+  const byIp = checkRateLimit(`login:ip:${ip}`, LIMIT, WINDOW)
+  if (!byIp.allowed) {
+    return { success: false, error: `Demasiados intentos desde tu red. Intenta en ${formatRetry(byIp.retryAfterMs)}.` }
+  }
+
+  const byId = checkRateLimit(`login:id:${identificador.trim().toLowerCase()}`, LIMIT, WINDOW)
+  if (!byId.allowed) {
+    return { success: false, error: `Demasiados intentos para este identificador. Intenta en ${formatRetry(byId.retryAfterMs)}.` }
   }
 
   try {
@@ -282,6 +366,7 @@ export async function loginUser(formData: FormData) {
     }
 
     const { matricula, nombre, foto_perfil } = result.rows[0];
+    await createSession(matricula)
     return { success: true, user: { matricula, nombre, foto_perfil } };
 
   } catch (error: any) {

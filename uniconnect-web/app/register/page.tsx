@@ -301,8 +301,8 @@ export default function RegisterResponsivePage() {
     }
   }
 
-  // Subir fotos después del registro
-  const uploadPhotosAfterRegister = async (matricula: number) => {
+  // Subir fotos después del registro (la sesión ya fue creada por el server action)
+  const uploadPhotosAfterRegister = async () => {
     // Reordenar: la foto principal va al slot 1
     const slots: { file: File; slot: 1 | 2 | 3 }[] = []
     const mainPhoto = photos[mainPhotoIndex]
@@ -319,7 +319,7 @@ export default function RegisterResponsivePage() {
     for (const { file, slot } of slots) {
       const fd = new FormData()
       fd.append('file', file)
-      await uploadProfilePhoto(matricula, slot, fd)
+      await uploadProfilePhoto(slot, fd)
     }
   }
 
@@ -351,7 +351,7 @@ export default function RegisterResponsivePage() {
 
     if (res.success && res.matricula) {
       if (photos.some(p => p !== null)) {
-        await uploadPhotosAfterRegister(res.matricula)
+        await uploadPhotosAfterRegister()
       }
       updateProfile({ name: formData.nombre })
       await login(res.matricula)
@@ -419,7 +419,7 @@ export default function RegisterResponsivePage() {
 
     if (res.success && res.matricula) {
       if (photos.some(p => p !== null)) {
-        await uploadPhotosAfterRegister(res.matricula)
+        await uploadPhotosAfterRegister()
       }
       updateProfile({ name: existingAlumno.nombre })
       await login(res.matricula)
