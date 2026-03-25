@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getStudents } from '@/app/actions/students'
 import { swipeUser } from '@/app/actions/match'
 import { useApp } from '@/context/AppContext'
+import { useRouter } from 'next/navigation'
+import { safePhotoUrl } from '@/lib/sanitize'
 
 // Tipos
 export interface Alumno {
@@ -24,6 +26,7 @@ export interface Alumno {
 export default function Home() {
   const { userProfile } = useApp()
   const myMatricula = userProfile.matricula
+  const router = useRouter()
 
   const [alumnos, setAlumnos] = useState<Alumno[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -33,9 +36,16 @@ export default function Home() {
   const [likes, setLikes] = useState<number[]>([])
   const [matchData, setMatchData] = useState<Alumno | null>(null)
 
+  // Touch swipe
+  const touchStartX = useRef(0)
+  const touchDeltaX = useRef(0)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [dragX, setDragX] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+
   const fetchAlumnosFromDB = useCallback(async () => {
     setLoading(true)
-    const data = await getStudents(myMatricula || undefined)
+    const data = await getStudents()
     setAlumnos(data || [])
     setCurrentIndex(0)
     setCurrentPhotoIndex(0)
@@ -43,22 +53,34 @@ export default function Home() {
   }, [myMatricula])
 
   useEffect(() => {
-    if (myMatricula !== undefined) {
+    if (myMatricula) {
       fetchAlumnosFromDB()
     }
   }, [fetchAlumnosFromDB, myMatricula])
 
+  const advanceCard = useCallback(() => {
+    setDirection(null)
+    setDragX(0)
+    if (currentIndex < alumnos.length - 1) {
+      setCurrentIndex(prev => prev + 1)
+      setCurrentPhotoIndex(0)
+    } else {
+      fetchAlumnosFromDB()
+    }
+  }, [currentIndex, alumnos.length, fetchAlumnosFromDB])
+
   const handleSwipe = async (dir: 'left' | 'right') => {
-    if (loading || !alumnos[currentIndex] || matchData) return
+    if (swiping || loading || !alumnos[currentIndex] || matchData) return
+    setSwiping(true)
     setDirection(dir)
-    
+
     const targetAlumno = alumnos[currentIndex]
     const liked = dir === 'right'
 
     if (liked) setLikes(prev => [...prev, targetAlumno.matricula])
     
     if (myMatricula) {
-      const res = await swipeUser(myMatricula, targetAlumno.matricula, liked)
+      const res = await swipeUser(targetAlumno.matricula, liked)
       if (res.success && res.isMatch) {
          setTimeout(() => setMatchData(targetAlumno), 300)
       }
@@ -79,24 +101,63 @@ export default function Home() {
 
   const closeMatchModal = () => {
     setMatchData(null)
-    setDirection(null)
-    if (currentIndex < alumnos.length - 1) {
-      setCurrentIndex(prev => prev + 1)
-      setCurrentPhotoIndex(0)
-    } else {
-      fetchAlumnosFromDB()
-    }
+    advanceCard()
   }
 
+  // Keyboard
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (loading || !alumnos[currentIndex] || matchData) return
+      if (swiping || loading || !alumnos[currentIndex] || matchData) return
       if (e.key === 'ArrowLeft') handleSwipe('left')
       if (e.key === 'ArrowRight') handleSwipe('right')
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [loading, currentIndex, alumnos, matchData, myMatricula])
+  }, [swiping, loading, currentIndex, alumnos, matchData, myMatricula])
+
+  // Touch handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (swiping || matchData) return
+    touchStartX.current = e.touches[0].clientX
+    touchDeltaX.current = 0
+    setIsDragging(true)
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || swiping) return
+    const delta = e.touches[0].clientX - touchStartX.current
+    touchDeltaX.current = delta
+    setDragX(delta)
+  }
+
+  const onTouchEnd = () => {
+    if (!isDragging || swiping) return
+    setIsDragging(false)
+    const threshold = 100
+
+    if (touchDeltaX.current > threshold) {
+      handleSwipe('right')
+    } else if (touchDeltaX.current < -threshold) {
+      handleSwipe('left')
+    } else {
+      setDragX(0)
+    }
+  }
+
+  // Auto-reload cuando se acaban las cards
+  useEffect(() => {
+    if (!loading && !matchData && myMatricula && currentIndex >= alumnos.length && alumnos.length > 0) {
+      fetchAlumnosFromDB()
+    }
+  }, [currentIndex, alumnos.length, loading, matchData, myMatricula, fetchAlumnosFromDB])
+
+  // Retry automático si no hay perfiles al cargar
+  useEffect(() => {
+    if (!loading && myMatricula && alumnos.length === 0) {
+      const timer = setTimeout(() => fetchAlumnosFromDB(), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [loading, myMatricula, alumnos.length, fetchAlumnosFromDB])
 
   const alumno = alumnos[currentIndex]
 
@@ -153,7 +214,7 @@ export default function Home() {
             <button className="w-full py-4 rounded-full font-bold text-[15px] tracking-wide text-white bg-gradient-to-tr from-[#ba0034] to-[#e51245] shadow-[0_8px_20px_rgba(186,0,52,0.4)] hover:brightness-110 transition-all">
               Enviar Mensaje
             </button>
-            <button 
+            <button
               onClick={closeMatchModal}
               className="w-full py-4 rounded-full font-semibold text-[15px] bg-[#2e3132] text-gray-300 hover:bg-gray-700 transition-colors"
             >
@@ -184,7 +245,12 @@ export default function Home() {
   }
 
   const interesList = alumno.intereses ? alumno.intereses.split(',').map(i => i.trim()).filter(i => i) : []
-  const photos = [alumno.foto_perfil, alumno.foto2, alumno.foto3].filter(Boolean)
+  const photos = [alumno.foto_perfil, alumno.foto2, alumno.foto3].map(safePhotoUrl).filter(Boolean)
+
+  // Calcular rotación y opacidad de overlays basado en drag
+  const dragRotation = isDragging ? dragX * 0.05 : 0
+  const showLikeOverlay = dragX > 50
+  const showNopeOverlay = dragX < -50
 
   return (
     <div className="flex min-h-[100dvh] flex-col items-center bg-[#f8f9fa] px-4 pt-4 pb-24 md:pt-6 font-sans overflow-hidden">

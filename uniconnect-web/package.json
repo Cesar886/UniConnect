@@ -4,15 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:ws": "node ws-server.js",
+    "dev:all": "node ws-server.js & next dev",
     "build": "next build",
     "start": "next start",
+    "start:ws": "node ws-server.js",
     "lint": "eslint"
   },
   "dependencies": {
+    "@react-oauth/google": "^0.13.4",
+    "google-auth-library": "^10.6.2",
+    "jose": "^6.2.2",
     "next": "16.1.6",
     "pg": "^8.20.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "ssh2": "^1.17.0"
   },
   "devDependencies": {

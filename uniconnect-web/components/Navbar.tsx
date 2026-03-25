@@ -16,8 +16,8 @@ export default function Navbar() {
   const { userProfile } = useApp()
 
   if (
-     pathname === '/login' || 
-     pathname === '/register' || 
+     pathname === '/login' ||
+     pathname === '/register' ||
      pathname === '/auth' ||
      (pathname === '/chat' && searchParams.get('id'))
   ) {

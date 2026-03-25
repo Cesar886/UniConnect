@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getProfile } from '@/app/actions/students'
@@ -13,6 +13,73 @@ interface ChatMessage {
   receiver_id: number
   text: string
   time: string
+  status: 'sending' | 'sent' | 'delivered' | 'read'
+  created_at?: string
+  edited_at?: string | null
+  tempId?: string
+}
+
+// Status check icons
+function StatusIcon({ status }: { status: string }) {
+  if (status === 'sending') {
+    // Clock icon
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5 inline-block ml-1 text-white/40">
+        <circle cx="12" cy="12" r="9" />
+        <path strokeLinecap="round" d="M12 7v5l3 3" />
+      </svg>
+    )
+  }
+  if (status === 'sent') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-3.5 h-3.5 inline-block ml-1 text-white/50">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    )
+  }
+  if (status === 'delivered') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-4 h-3.5 inline-block ml-1 text-white/50">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M1 13l4 4L15 7" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 13l4 4L21 7" />
+      </svg>
+    )
+  }
+  if (status === 'read') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-4 h-3.5 inline-block ml-1 text-blue-200">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M1 13l4 4L15 7" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 13l4 4L21 7" />
+      </svg>
+    )
+  }
+  return null
+}
+
+// Connection status banner
+function ConnectionBanner({ status }: { status: string }) {
+  if (status === 'connected') return null
+  return (
+    <div className={`sticky top-[64px] z-30 text-center py-2 text-xs font-bold tracking-wider uppercase transition-all duration-300 ${
+      status === 'connecting'
+        ? 'bg-amber-50 text-amber-600 border-b border-amber-100'
+        : 'bg-red-50 text-red-500 border-b border-red-100'
+    }`}>
+      <div className="flex items-center justify-center gap-2">
+        {status === 'connecting' ? (
+          <>
+            <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            Reconectando...
+          </>
+        ) : (
+          <>
+            <div className="w-2 h-2 bg-red-400 rounded-full" />
+            Sin conexión
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function ChatContent() {
@@ -20,7 +87,7 @@ function ChatContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const myMatricula = userProfile.matricula
-  
+
   const [peerProfile, setPeerProfile] = useState<any>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -33,17 +100,26 @@ function ChatContent() {
   const [isReporting, setIsReporting] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const tempIdCounter = useRef(0)
 
   const peerIdParam = searchParams.get('id')
   const peerId = peerIdParam ? parseInt(peerIdParam, 10) : null
 
-  const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].filter(Boolean) : []
+  const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].map(safePhotoUrl).filter(Boolean) : []
   const interesList = peerProfile && peerProfile.intereses ? peerProfile.intereses.split(',').map((i: string) => i.trim()).filter(Boolean) : []
 
   useEffect(() => {
     if (!myMatricula || !peerId) return
-    getProfile(peerId).then(data => { if (data) setPeerProfile(data) })
-    getMessages(myMatricula, peerId).then(data => { setMessages(data || []); setLoading(false) })
+    isMatch(peerId).then(matched => {
+      if (!matched) {
+        setNotMatch(true)
+        setLoading(false)
+        return
+      }
+      getProfile(peerId).then(data => { if (data) setPeerProfile(data) })
+      getMessages(peerId).then(data => { setMessages(data || []); setLoading(false) })
+    })
   }, [myMatricula, peerId])
 
   useEffect(() => {
@@ -58,17 +134,69 @@ function ChatContent() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, isTyping])
 
-  const handleSend = async () => {
-    if (!newMessage.trim() || !myMatricula || !peerId) return
+  // Send message with optimistic UI + ack
+  const handleSend = useCallback(() => {
+    if (!newMessage.trim() || !myMatricula || !peerId || isOverLimit) return
     const textToSend = newMessage.trim()
-    
+    const tempId = `temp_${Date.now()}_${tempIdCounter.current++}`
+
+    // Optimistic message
+    const optimisticMsg: ChatMessage = {
+      id: -1,
+      sender_id: myMatricula,
+      receiver_id: peerId,
+      text: textToSend,
+      time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      status: 'sending',
+      created_at: new Date().toISOString(),
+      tempId,
+    }
+    setMessages(prev => [...prev, optimisticMsg])
     setNewMessage('')
-    setMessages(prev => [ ...prev, { id: Date.now(), sender_id: myMatricula, receiver_id: peerId, text: textToSend, time: 'Env...' }])
-    const res = await sendMessage(myMatricula, peerId, textToSend)
-    if (res.success) {
-      getMessages(myMatricula, peerId).then(data => setMessages(data || []))
+    setShowEmojis(false)
+
+    // Send via socket (or queue if offline)
+    emitOrQueue('message:send', { receiverId: peerId, text: textToSend, tempId }, (res: any) => {
+      if (res?.error) {
+        // Remove optimistic on ack error
+        setMessages(prev => prev.filter(m => m.tempId !== tempId))
+      }
+    })
+
+    emitOrQueue('typing:stop', { receiverId: peerId })
+  }, [newMessage, myMatricula, peerId, isOverLimit])
+
+  // Edit message
+  const handleEdit = useCallback(() => {
+    if (!editingMsg || !editText.trim()) return
+    emitOrQueue('message:edit', { messageId: editingMsg.id, newText: editText.trim() })
+    setEditingMsg(null)
+    setEditText('')
+  }, [editingMsg, editText])
+
+  // Delete message
+  const handleDelete = useCallback((msgId: number) => {
+    emitOrQueue('message:delete', { messageId: msgId })
+    setContextMenu(null)
+  }, [])
+
+  // Typing indicator
+  const handleInputChange = (text: string) => {
+    setNewMessage(text)
+    if (!myMatricula || !peerId) return
+
+    if (text.trim()) {
+      emitOrQueue('typing:start', { receiverId: peerId })
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        emitOrQueue('typing:stop', { receiverId: peerId })
+      }, 2000)
+    } else {
+      emitOrQueue('typing:stop', { receiverId: peerId })
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     }
   }
 
@@ -90,6 +218,19 @@ function ChatContent() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FDFDFD] flex-col font-sans">
         <div className="inline-block h-10 w-10 animate-spin rounded-full border-[4px] border-pink-100 border-t-pink-500"></div>
+      </div>
+    )
+  }
+
+  if (notMatch) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FDFDFD] flex-col font-sans px-6 text-center">
+        <p className="text-6xl mb-6">🚫</p>
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">No tienes match con esta persona</h2>
+        <p className="text-gray-500 text-sm mb-8">Solo puedes chatear con tus matches mutuos.</p>
+        <button onClick={() => router.push('/matches')} className="px-8 py-3 bg-gray-900 text-white rounded-full font-bold shadow-lg hover:-translate-y-0.5 transition-all active:scale-95">
+          Ir a Matches
+        </button>
       </div>
     )
   }
@@ -147,19 +288,17 @@ function ChatContent() {
       {showProfile && peerProfile && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex flex-col justify-end md:items-center md:justify-center font-sans animate-in fade-in duration-300">
           <div className="bg-white w-full md:w-[400px] h-[85vh] md:h-[700px] rounded-t-[2rem] md:rounded-[2rem] shadow-2xl flex flex-col relative overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
-            {/* Close Button */}
-            <button 
-              onClick={() => { setShowProfile(false); setCurrentPhotoIndex(0); }} 
+            <button
+              onClick={() => { setShowProfile(false); setCurrentPhotoIndex(0); }}
               className="absolute top-4 right-4 z-50 bg-black/40 text-white p-2 rounded-full backdrop-blur-md hover:bg-black/60 active:scale-90 transition-all"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
 
-            {/* Photo Carousel Area */}
             <div className="w-full h-[55%] relative shrink-0 bg-gray-100 flex items-center justify-center">
               {peerPhotos.length > 1 && (
                 <div className="absolute top-3 left-0 right-0 gap-1.5 px-3 flex z-20">
-                  {peerPhotos.map((_, i) => (
+                  {peerPhotos.map((_: string, i: number) => (
                     <div key={i} className={`h-1 flex-1 rounded-full shadow-sm transition-colors duration-300 ${i === currentPhotoIndex ? 'bg-white' : 'bg-white/40'}`} />
                   ))}
                 </div>
@@ -177,7 +316,7 @@ function ChatContent() {
                 <span className="text-[6rem] font-black text-gray-300">{peerProfile.nombre.charAt(0)}</span>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/10 to-transparent pointer-events-none"></div>
-              
+
               <div className="absolute bottom-4 left-5 right-5 text-white pointer-events-none">
                 <h2 className="text-3xl font-extrabold drop-shadow-md">{peerProfile.nombre} <span className="text-xl font-normal opacity-90">{peerProfile.edad}</span></h2>
                 <div className="flex items-center gap-1.5 mt-1 opacity-90 text-sm font-semibold drop-shadow-md">
@@ -186,7 +325,6 @@ function ChatContent() {
               </div>
             </div>
 
-            {/* Info Area */}
             <div className="p-6 flex-1 overflow-y-auto scrollbar-hide bg-white">
               <div className="mb-5">
                 <h3 className="uppercase tracking-widest text-[10px] font-bold text-gray-400 mb-2 ml-1">Sobre Mí</h3>
@@ -213,7 +351,7 @@ function ChatContent() {
       <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-pink-100/50 rounded-full blur-[120px] pointer-events-none translate-x-1/3 -translate-y-1/4"></div>
       <div className="fixed bottom-0 left-0 w-[600px] h-[600px] bg-violet-100/40 rounded-full blur-[120px] pointer-events-none -translate-x-1/3 translate-y-1/3"></div>
 
-      {/* Header Glassmorphism */}
+      {/* Header */}
       <div className="sticky top-0 bg-white/60 backdrop-blur-2xl z-40 px-4 py-3 border-b border-white shadow-[0_4px_30px_rgba(0,0,0,0.02)] flex items-center gap-4">
         <button
           onClick={() => router.push('/matches')}
@@ -226,7 +364,7 @@ function ChatContent() {
         <div onClick={() => setShowProfile(true)} className="relative w-11 h-11 rounded-full overflow-hidden shrink-0 shadow-sm border-2 border-white bg-gradient-to-tr from-pink-300 to-violet-400 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
           {peerProfile.foto_perfil ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={peerProfile.foto_perfil} alt={peerProfile.nombre} className="w-full h-full object-cover" />
+            <img src={safePhotoUrl(peerProfile.foto_perfil)} alt={peerProfile.nombre} className="w-full h-full object-cover" />
           ) : (
              <span className="text-xl font-black text-white">{peerProfile.nombre.charAt(0)}</span>
           )}
@@ -245,9 +383,12 @@ function ChatContent() {
         </button>
       </div>
 
+      {/* Connection status banner */}
+      <ConnectionBanner status={connectionStatus} />
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-8 space-y-4 pb-32 scrollbar-hide z-10">
-        
+
         {/* Match header Intro */}
         <div className="text-center py-10 mb-8 mt-4 relative">
           <div onClick={() => setShowProfile(true)} className="relative w-32 h-32 rounded-full overflow-hidden mx-auto mb-6 shadow-2xl shadow-pink-200/50 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-transform">
@@ -255,18 +396,15 @@ function ChatContent() {
             <div className="absolute inset-[3px] bg-white rounded-full overflow-hidden flex items-center justify-center">
               {peerProfile.foto_perfil ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={peerProfile.foto_perfil} alt="" className="w-full h-full object-cover" />
+                <img src={safePhotoUrl(peerProfile.foto_perfil)} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-5xl font-black text-gray-300">{peerProfile.nombre.charAt(0)}</span>
               )}
             </div>
-            {/* Sparkles floating */}
             <div className="absolute top-1 right-2 text-white animate-bounce">✨</div>
             <div className="absolute bottom-4 left-2 text-white animate-pulse">💖</div>
           </div>
-          <p className="text-sm text-gray-500 font-bold tracking-widest uppercase mb-1">
-            Nuevo Match
-          </p>
+          <p className="text-sm text-gray-500 font-bold tracking-widest uppercase mb-1">Nuevo Match</p>
           <h3 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-gray-800 to-gray-500 tracking-tight">
             {peerProfile.nombre}
           </h3>
@@ -283,35 +421,164 @@ function ChatContent() {
            </div>
         )}
 
-        {messages.map((msg, index) => {
+        {messages.map((msg) => {
           const isMe = msg.sender_id === myMatricula
-          const isLast = index === messages.length - 1
+          const canModify = isMe && isWithinEditWindow(msg) && msg.status !== 'sending'
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
+            <div
+              key={msg.tempId || msg.id}
+              className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300 group`}
+              onContextMenu={(e) => handleMessageContext(e, msg)}
+            >
+              {/* Action buttons on hover (desktop) */}
+              {canModify && (
+                <div className={`hidden group-hover:flex items-center gap-1 mx-2 ${isMe ? 'order-first' : 'order-last'}`}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditingMsg({ id: msg.id, text: msg.text })
+                      setEditText(msg.text)
+                    }}
+                    className="p-1.5 rounded-full bg-white/80 border border-gray-100 shadow-sm hover:bg-gray-50 transition-all text-gray-400 hover:text-blue-500"
+                    title="Editar"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                      <path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" />
+                      <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDelete(msg.id)
+                    }}
+                    className="p-1.5 rounded-full bg-white/80 border border-gray-100 shadow-sm hover:bg-red-50 transition-all text-gray-400 hover:text-red-500"
+                    title="Eliminar"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 1 .7.798l-.2 4.5a.75.75 0 0 1-1.496-.066l.2-4.5a.75.75 0 0 1 .796-.731ZM11.42 7.72a.75.75 0 0 1 .796.731l.2 4.5a.75.75 0 1 1-1.496.066l-.2-4.5a.75.75 0 0 1 .7-.798Z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+
               <div
                 className={`max-w-[80%] md:max-w-[70%] px-5 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ${
                   isMe
-                    ? 'bg-gradient-to-br from-pink-500 via-rose-500 to-fuchsia-600 text-white rounded-3xl rounded-br-[4px]'
+                    ? `bg-gradient-to-br from-pink-500 via-rose-500 to-fuchsia-600 text-white rounded-3xl rounded-br-[4px] ${msg.status === 'sending' ? 'opacity-70' : ''}`
                     : 'bg-white/80 backdrop-blur-xl text-gray-800 border border-white rounded-[24px] rounded-bl-[4px]'
                 }`}
               >
                 <p className={`text-[15.5px] leading-relaxed break-words ${isMe ? 'font-medium' : 'font-semibold'}`}>
                   {msg.text}
                 </p>
-                <p className={`text-[10px] mt-1 font-bold tracking-widest text-right ${isMe ? 'text-white/60' : 'text-gray-400'}`}>
-                  {msg.time}
-                </p>
+                <div className={`flex items-center justify-end gap-0.5 mt-1 ${isMe ? 'text-white/60' : 'text-gray-400'}`}>
+                  {msg.edited_at && (
+                    <span className="text-[9px] font-bold tracking-wider mr-1">editado</span>
+                  )}
+                  <span className="text-[10px] font-bold tracking-widest">
+                    {msg.time}
+                  </span>
+                  {isMe && <StatusIcon status={msg.status || 'sent'} />}
+                </div>
               </div>
             </div>
           )
         })}
+
+        {/* Typing indicator bubble */}
+        {isTyping && (
+          <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-300">
+            <div className="bg-white/80 backdrop-blur-xl border border-white rounded-[24px] rounded-bl-[4px] px-5 py-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+              <div className="flex gap-1.5 items-center">
+                <span className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} className="h-6" />
       </div>
 
-      {/* Message input fixed bottom (Floating Pill) */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 pb-safe z-50">
+      {/* Context menu (mobile long-press / right-click) */}
+      {contextMenu && (
+        <div
+          className="fixed z-[200] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 fade-in duration-150"
+          style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              const msg = messages.find(m => m.id === contextMenu.msgId)
+              if (msg) {
+                setEditingMsg({ id: msg.id, text: msg.text })
+                setEditText(msg.text)
+              }
+              setContextMenu(null)
+            }}
+            className="flex items-center gap-3 px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 w-full text-left transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-blue-500">
+              <path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" />
+            </svg>
+            Editar
+          </button>
+          <div className="h-px bg-gray-100"></div>
+          <button
+            onClick={() => {
+              handleDelete(contextMenu.msgId)
+            }}
+            className="flex items-center gap-3 px-5 py-3 text-sm font-semibold text-red-500 hover:bg-red-50 w-full text-left transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 1 .7.798l-.2 4.5a.75.75 0 0 1-1.496-.066l.2-4.5a.75.75 0 0 1 .796-.731ZM11.42 7.72a.75.75 0 0 1 .796.731l.2 4.5a.75.75 0 1 1-1.496.066l-.2-4.5a.75.75 0 0 1 .7-.798Z" clipRule="evenodd" />
+            </svg>
+            Eliminar
+          </button>
+        </div>
+      )}
 
-        {/* Picker flotante de Emojis */}
+      {/* Edit modal */}
+      {editingMsg && (
+        <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-extrabold text-gray-800 mb-4">Editar mensaje</h3>
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-[15px] font-medium text-gray-800 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100 resize-none transition-all"
+              rows={3}
+              maxLength={MAX_MESSAGE_LENGTH}
+              autoFocus
+            />
+            <div className="flex justify-between items-center mt-2">
+              <span className={`text-xs font-medium ${editText.length > MAX_MESSAGE_LENGTH * 0.9 ? 'text-red-400' : 'text-gray-300'}`}>
+                {editText.length}/{MAX_MESSAGE_LENGTH}
+              </span>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setEditingMsg(null); setEditText('') }}
+                  className="px-5 py-2.5 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleEdit}
+                  disabled={!editText.trim() || editText.trim() === editingMsg.text || editText.length > MAX_MESSAGE_LENGTH}
+                  className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-pink-500 to-violet-500 shadow-lg shadow-pink-500/20 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:shadow-none disabled:translate-y-0"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message input */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 pb-safe z-50">
         {showEmojis && (
           <div className="absolute bottom-[80px] left-4 bg-white/95 backdrop-blur-3xl border border-white shadow-[0_10px_40px_-10px_rgba(236,72,153,0.3)] p-3 rounded-3xl flex flex-wrap gap-1.5 w-[256px] z-50 animate-in slide-in-from-bottom-2 fade-in duration-200">
             <div className="w-full flex justify-between items-center px-2 mb-1">
@@ -326,8 +593,8 @@ function ChatContent() {
               <button
                 key={emoji}
                 onClick={() => {
-                  setNewMessage(prev => prev + emoji);
-                  setShowEmojis(false);
+                  handleInputChange(newMessage + emoji)
+                  setShowEmojis(false)
                 }}
                 className="w-10 h-10 text-2xl flex items-center justify-center hover:bg-pink-50 rounded-full transition-transform hover:scale-125 active:scale-90"
               >
@@ -338,7 +605,7 @@ function ChatContent() {
         )}
 
         <div className="max-w-lg mx-auto flex items-end gap-2 bg-white/80 backdrop-blur-3xl p-2 rounded-[2rem] border border-white shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] relative">
-          <button 
+          <button
             onClick={() => setShowEmojis(!showEmojis)}
             className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-all duration-300 ${
               showEmojis ? 'bg-pink-100 text-pink-500 rotate-45' : 'bg-gray-50 text-gray-400 hover:text-pink-500 hover:bg-pink-50'
@@ -348,18 +615,29 @@ function ChatContent() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
           </button>
-          <textarea
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder="Mensaje..."
-            rows={1}
-            className="flex-1 bg-transparent px-2 py-3 max-h-32 text-gray-800 outline-none resize-none text-[15px] font-medium placeholder-gray-400 scrollbar-hide"
-            autoFocus
-          />
+          <div className="flex-1 relative">
+            <textarea
+              value={newMessage}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+              placeholder="Mensaje..."
+              rows={1}
+              maxLength={MAX_MESSAGE_LENGTH + 100}
+              className="w-full bg-transparent px-2 py-3 max-h-32 text-gray-800 outline-none resize-none text-[15px] font-medium placeholder-gray-400 scrollbar-hide"
+              autoFocus
+            />
+            {/* Character counter - shows near limit */}
+            {charCount > MAX_MESSAGE_LENGTH * 0.8 && (
+              <span className={`absolute -top-6 right-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                isOverLimit ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-400'
+              }`}>
+                {charCount}/{MAX_MESSAGE_LENGTH}
+              </span>
+            )}
+          </div>
           <button
             onClick={handleSend}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || isOverLimit}
             className="w-11 h-11 shrink-0 bg-gradient-to-br from-pink-500 to-violet-500 rounded-full flex items-center justify-center shadow-lg shadow-pink-500/30 hover:-translate-y-0.5 transition-all active:scale-90 disabled:opacity-0 disabled:scale-50 disabled:hidden"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white ml-0.5" viewBox="0 0 24 24" fill="currentColor">

@@ -4,7 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/context/AppContext'
-import { loginUser } from '@/app/actions/auth'
+import { loginUser, loginWithGoogle } from '@/app/actions/auth'
+import { GoogleLogin } from '@react-oauth/google'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -14,6 +15,30 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleGoogleSuccess = async (credentialResponse: { credential?: string }) => {
+    if (!credentialResponse.credential) {
+      setError('No se recibió token de Google.')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      // Enviamos el id_token al servidor; el backend verifica su firma con Google
+      const res = await loginWithGoogle(credentialResponse.credential)
+      if (res.success && res.user?.matricula) {
+        updateProfile({ name: res.user?.nombre || 'Usuario' })
+        await login(res.user.matricula)
+        router.push('/')
+      } else {
+        setError(res.error || 'No se encontró una cuenta con ese correo de Google.')
+      }
+    } catch {
+      setError('Error al conectar con Google.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,8 +53,7 @@ export default function LoginPage() {
 
     if (res.success && res.user?.matricula) {
       updateProfile({ name: res.user?.nombre || 'Usuario' })
-      login(res.user.matricula)
-      setLoading(false)
+      await login(res.user.matricula)
       router.push('/')
     } else {
       setError(res.error || 'Ocurrió un error al iniciar sesión.')
@@ -108,9 +132,26 @@ export default function LoginPage() {
             </div>
           </form>
 
+          <div className="mt-6 flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">o</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+
+          <div className="mt-4 flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError('No se pudo iniciar sesión con Google.')}
+              useOneTap={false}
+              text="continue_with"
+              shape="rectangular"
+              width="368"
+            />
+          </div>
+
           <div className="mt-8 text-center pt-6 border-t border-gray-100">
             <p className="text-gray-500 text-sm font-medium">
-              ¿Eres nuevo en la UM?{' '}
+              ¿Eres nuevo en Tinder UM?{' '}
               <Link href="/register" className="text-pink-500 font-bold hover:text-pink-600 transition-colors">
                 Regístrate aquí
               </Link>
