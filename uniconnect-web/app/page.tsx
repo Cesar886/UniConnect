@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { getStudents, updatePreferences } from '@/app/actions/students'
+import { getStudents, updatePreferences, resetUserFeed } from '@/app/actions/students'
 import { swipeUser } from '@/app/actions/match'
 import { useApp } from '@/context/AppContext'
 import { useRouter } from 'next/navigation'
@@ -39,6 +39,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false)
   const [prefAge, setPrefAge] = useState({ min: 18, max: 99 })
   const [prefGender, setPrefGender] = useState('Ambos')
+  const [isResetting, setIsResetting] = useState(false)
 
   // Touch swipe
   const touchStartX = useRef(0)
@@ -237,17 +238,141 @@ export default function Home() {
   // NO HAY NADIE
   if (!alumno) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f8f9fa] flex-col font-sans px-6">
-        <div className="w-24 h-24 rounded-full bg-[#f0f1f2] flex items-center justify-center mb-6">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-gray-400">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-          </svg>
+      <div className="flex min-h-[100dvh] flex-col items-center bg-[#f8f9fa] px-4 pt-4 pb-24 md:pt-6 font-sans overflow-hidden">
+        {/* TOP NAV "EDITORIAL" (REPEATED FOR EMPTY STATE) */}
+        <div className="w-full max-w-[420px] mb-5 flex justify-between items-center px-1 z-10">
+          <button 
+            onClick={() => router.push('/profile')}
+            className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#e1e3e4] overflow-hidden focus:outline-none hover:ring-2 hover:ring-[#ba0034]/20 transition-all"
+          >
+            {userProfile?.photo ? (
+              <img src={userProfile.photo} className="w-full h-full object-cover" alt="Me" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[#585d7e] font-bold bg-[#f0f1f2]">
+                {userProfile?.name?.charAt(0)}
+              </div>
+            )}
+          </button>
+          
+          <div className="flex flex-col items-center">
+            <h1 className="text-[22px] font-black tracking-tighter text-[#191c1d] leading-none">
+              UniConnect<span className="text-[#ba0034]">.</span>
+            </h1>
+            <span className="text-[9px] font-bold tracking-[0.2em] text-[#916e6f] uppercase mt-1">The Pulse</span>
+          </div>
+
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="w-10 h-10 rounded-full bg-white border border-[#e1e3e4] shadow-sm flex items-center justify-center text-[#585d7e] focus:outline-none hover:bg-gray-50 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+            </svg>
+          </button>
         </div>
-        <h2 className="text-2xl font-black text-[#191c1d] tracking-tight mb-2">No hay perfiles</h2>
-        <p className="text-[#585d7e] text-center max-w-[260px] mb-8 font-medium">Has visto a todos los estudiantes disponibles en el campus. Vuelve más tarde.</p>
-        <button onClick={fetchAlumnosFromDB} className="px-8 py-3.5 rounded-full bg-white text-[#ba0034] font-bold shadow-[0_4px_14px_rgba(0,0,0,0.05)] hover:shadow-md transition-all border border-[#e1e3e4]">
-          Actualizar Feed
-        </button>
+
+        {/* MODAL DE PREFERENCIAS (REPEATED FOR EMPTY STATE TO PREVENT BREAKING HOOKS) */}
+        {showSettings && (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-6 transition-all animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 pb-12 shadow-2xl animate-in slide-in-from-bottom-10 duration-500">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-2xl font-black text-[#191c1d] tracking-tight">Preferencias</h2>
+                <button onClick={() => setShowSettings(false)} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-10">
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest leading-none">Rango de Edad</label>
+                    <span className="text-lg font-black text-[#ba0034] tracking-tight">{prefAge.min} - {prefAge.max}</span>
+                  </div>
+                  <div className="px-2">
+                    <input 
+                      type="range" 
+                      min="18" 
+                      max="99" 
+                      value={prefAge.max} 
+                      onChange={(e) => setPrefAge(prev => ({ ...prev, max: parseInt(e.target.value) }))}
+                      className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer range-pink focus:outline-none"
+                      style={{ accentColor: '#ba0034' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 px-1">Interés en</label>
+                  <div className="flex gap-2 p-1 bg-gray-50 rounded-[1.2rem]">
+                    {['Hombres', 'Mujeres', 'Ambos'].map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => setPrefGender(g)}
+                        className={`flex-1 py-3.5 rounded-[1rem] text-sm font-bold transition-all ${prefGender === g ? 'bg-white text-[#ba0034] shadow-sm ring-1 ring-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={async () => {
+                    if (myMatricula) {
+                      await updatePreferences(myMatricula, {
+                        pref_edad_min: prefAge.min,
+                        pref_edad_max: prefAge.max,
+                        genero_interes: prefGender
+                      });
+                      updateProfile({ pref_edad_min: prefAge.min, pref_edad_max: prefAge.max, genero_interes: prefGender });
+                      fetchAlumnosFromDB();
+                      setShowSettings(false);
+                    }
+                  }}
+                  className="w-full py-4.5 rounded-2xl bg-gray-900 text-white font-bold text-[15px] hover:bg-black transition-all active:scale-[0.98] shadow-lg shadow-gray-200"
+                >
+                  Guardar y Actualizar
+                </button>
+
+                <div className="pt-4 border-t border-gray-100">
+                  <button 
+                    disabled={isResetting}
+                    onClick={async () => {
+                      if (myMatricula && confirm('¿Deseas reiniciar tu feed?')) {
+                        setIsResetting(true);
+                        const res = await resetUserFeed(myMatricula);
+                        if (res.success) {
+                          fetchAlumnosFromDB();
+                          alert('¡Feed reiniciado!');
+                          setShowSettings(false);
+                        }
+                        setIsResetting(false);
+                      }
+                    }}
+                    className="w-full py-4 rounded-2xl bg-white border border-red-100 text-red-600 font-bold text-[14px] hover:bg-red-50"
+                  >
+                    {isResetting ? 'Reiniciando...' : 'Reiniciar Feed 🔄'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col items-center justify-center -mt-20">
+          <div className="w-24 h-24 rounded-full bg-[#f0f1f2] flex items-center justify-center mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-gray-400">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-black text-[#191c1d] tracking-tight mb-2">No hay perfiles</h2>
+          <p className="text-[#585d7e] text-center max-w-[260px] mb-8 font-medium">Has visto a todos los estudiantes disponibles en el campus. Vuelve más tarde.</p>
+          <button onClick={fetchAlumnosFromDB} className="px-8 py-3.5 rounded-full bg-white text-[#ba0034] font-bold shadow-[0_4px_14px_rgba(0,0,0,0.05)] hover:shadow-md transition-all border border-[#e1e3e4]">
+            Actualizar Feed
+          </button>
+        </div>
       </div>
     )
   }
@@ -265,7 +390,10 @@ export default function Home() {
       
       {/* TOP NAV "EDITORIAL" */}
       <div className="w-full max-w-[420px] mb-5 flex justify-between items-center px-1 z-10">
-        <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#e1e3e4] overflow-hidden">
+        <button 
+          onClick={() => router.push('/profile')}
+          className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#e1e3e4] overflow-hidden focus:outline-none hover:ring-2 hover:ring-[#ba0034]/20 transition-all"
+        >
           {userProfile?.photo ? (
             <img src={userProfile.photo} className="w-full h-full object-cover" alt="Me" />
           ) : (
@@ -273,7 +401,7 @@ export default function Home() {
               {userProfile?.name?.charAt(0)}
             </div>
           )}
-        </div>
+        </button>
         
         <div className="flex flex-col items-center">
           <h1 className="text-[22px] font-black tracking-tighter text-[#191c1d] leading-none">
@@ -365,6 +493,29 @@ export default function Home() {
               >
                 Guardar y Actualizar
               </button>
+
+              <div className="pt-4 border-t border-gray-100">
+                <button 
+                  disabled={isResetting}
+                  onClick={async () => {
+                    if (myMatricula && confirm('¿Deseas reiniciar tu feed? Volverás a ver a personas que habías rechazado (excepto tus matches actuales).')) {
+                      setIsResetting(true);
+                      const res = await resetUserFeed(myMatricula);
+                      if (res.success) {
+                        fetchAlumnosFromDB();
+                        alert('¡Feed reiniciado exitosamente!');
+                        setShowSettings(false);
+                      } else {
+                        alert('Error: ' + res.error);
+                      }
+                      setIsResetting(false);
+                    }
+                  }}
+                  className="w-full py-4 rounded-2xl bg-white border border-red-100 text-red-600 font-bold text-[14px] hover:bg-red-50 transition-all active:scale-[0.98]"
+                >
+                  {isResetting ? 'Reiniciando...' : 'Reiniciar Feed 🔄'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -477,14 +628,6 @@ export default function Home() {
           </svg>
         </button>
 
-        {/* Super Like Button (Center, Smaller) */}
-        <button
-          className="group flex h-14 w-14 mt-2 items-center justify-center rounded-full bg-white shadow-[0_8px_16px_rgba(0,0,0,0.04)] hover:bg-[#f3f4f5] hover:-translate-y-1 transition-all duration-300 active:scale-95 border border-[#e1e3e4]"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-[#920027]">
-            <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
-          </svg>
-        </button>
 
         {/* Like Button */}
         <button

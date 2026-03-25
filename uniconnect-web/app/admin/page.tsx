@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/context/AppContext'
 import { getReports, banUser, dismissReport } from '@/app/actions/report'
-import { getAllUsers, toggleBanStatus, toggleAdminStatus } from '@/app/actions/students'
+import { getAllUsers, toggleBanStatus, toggleAdminStatus, resetAllFeeds, toggleMinorStatus } from '@/app/actions/students'
 
 interface Report {
   id: number;
@@ -129,6 +129,17 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleToggleMinor = async (targetId: number, currentStatus: boolean) => {
+    const action = currentStatus ? 'QUERER PASAR A UNIVERSIDAD' : 'MARCAR COMO PREPA (MENOR)'
+    if (!confirm(`¿Deseas cambiar el estado a '${action === 'QUERER PASAR A UNIVERSIDAD' ? 'Universidad' : 'Prepa'}'?`)) return
+    const res = await toggleMinorStatus(userProfile.matricula!, targetId, !currentStatus)
+    if (res.success) {
+      loadUsers(searchQuery)
+    } else {
+      alert("Error: " + res.error)
+    }
+  }
+
   if (loading || !userProfile.is_admin) {
     return <div className="min-h-screen flex items-center justify-center p-10 font-sans text-xl">Cargando Panel de Admin...</div>
   }
@@ -146,18 +157,39 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <div className="flex gap-4 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div className="flex gap-4">
+            <button 
+              onClick={() => setActiveTab('reports')}
+              className={`px-6 py-3 rounded-2xl font-bold transition-all ${activeTab === 'reports' ? 'bg-[#ba0034] text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+            >
+              Reportes {reports.length > 0 && `(${reports.filter(r => r.status === 'Pendiente').length})`}
+            </button>
+            <button 
+              onClick={() => setActiveTab('users')}
+              className={`px-6 py-3 rounded-2xl font-bold transition-all ${activeTab === 'users' ? 'bg-[#ba0034] text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+            >
+              Usuarios
+            </button>
+          </div>
+
           <button 
-            onClick={() => setActiveTab('reports')}
-            className={`px-6 py-3 rounded-2xl font-bold transition-all ${activeTab === 'reports' ? 'bg-[#ba0034] text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+            onClick={async () => {
+              if (confirm('¡ATENCIÓN! ¿Estás seguro de reiniciar los feeds de TODOS los usuarios? Esto borrará los swipes no-match globalmente. Esta acción no se puede deshacer.')) {
+                setLoading(true);
+                const res = await resetAllFeeds(userProfile.matricula!);
+                if (res.success) {
+                  alert('¡Feeds de todos los usuarios reiniciados!');
+                } else {
+                  alert('Error: ' + res.error);
+                }
+                setLoading(false);
+              }
+            }}
+            className="px-6 py-3 bg-white border border-red-50 text-red-600 font-bold rounded-2xl hover:bg-red-50 transition-all flex items-center gap-2"
           >
-            Reportes {reports.length > 0 && `(${reports.filter(r => r.status === 'Pendiente').length})`}
-          </button>
-          <button 
-            onClick={() => setActiveTab('users')}
-            className={`px-6 py-3 rounded-2xl font-bold transition-all ${activeTab === 'users' ? 'bg-[#ba0034] text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-          >
-            Usuarios
+            <span>Reiniciar Todos los Feeds</span>
+            <span className="text-lg">🔄</span>
           </button>
         </div>
 
@@ -266,9 +298,12 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                       <td className="p-5">
-                        <span className={`px-2 py-1 rounded-lg text-xs font-bold ${u.es_menor ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                        <button 
+                          onClick={() => handleToggleMinor(u.matricula, u.es_menor)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${u.es_menor ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        >
                           {u.es_menor ? 'Prepa (Menor)' : 'Universidad'}
-                        </span>
+                        </button>
                       </td>
                       <td className="p-5 text-right flex items-center justify-end gap-2">
                         <button 

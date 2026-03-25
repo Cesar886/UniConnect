@@ -64,7 +64,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-sans">
       <div className="w-full max-w-md">
-        
+
         {/* Logo Superior */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-pink-500 to-violet-500 rounded-2xl mb-4 shadow-xl shadow-pink-500/20">
@@ -151,7 +151,7 @@ export default function LoginPage() {
 
           <div className="mt-8 text-center pt-6 border-t border-gray-100">
             <p className="text-gray-500 text-sm font-medium">
-              ¿Eres nuevo en Tinder UM?{' '}
+              ¿Eres nuevo en UniConnect?{' '}
               <Link href="/register" className="text-pink-500 font-bold hover:text-pink-600 transition-colors">
                 Regístrate aquí
               </Link>
