@@ -42,8 +42,8 @@ export async function banUser(adminId: number, targetId: number) {
     const check = await pool.query('SELECT is_admin FROM alumnos WHERE matricula = $1', [adminId]);
     if (check.rows.length === 0 || !check.rows[0].is_admin) return { success: false, error: 'Acceso Denegado' };
     
-    // Expulsar al usuario borrando su registro (esto borrará también sus mensajes y reportes gracias a ON DELETE CASCADE)
-    await pool.query('DELETE FROM alumnos WHERE matricula = $1', [targetId]);
+    // Soft ban: marcar como baneado en lugar de borrar
+    await pool.query('UPDATE alumnos SET is_banned = true WHERE matricula = $1', [targetId]);
     return { success: true };
   } catch (err: any) {
     console.error('Error banning user:', err);
