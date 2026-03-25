@@ -17,10 +17,10 @@ export default function Navbar() {
     if (!userProfile.matricula) return
 
     const socket = getSocket()
-    registerUser(userProfile.matricula)
+    registerUser()
 
     // Initial load
-    getUnreadCount(userProfile.matricula).then(count => setUnread(count))
+    getUnreadCount().then(count => setUnread(count))
 
     // Listen for real-time updates
     const onUnreadUpdate = (count: number) => {
@@ -30,7 +30,7 @@ export default function Navbar() {
     // Re-fetch on reconnect
     const unsubConnection = onConnectionChange((status) => {
       if (status === 'connected' && userProfile.matricula) {
-        getUnreadCount(userProfile.matricula).then(count => setUnread(count))
+        getUnreadCount().then(count => setUnread(count))
       }
     })
 

@@ -7,7 +7,7 @@ type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
 type ConnectionListener = (status: ConnectionStatus) => void
 
 let socket: Socket | null = null
-let registeredMatricula: number | null = null
+let shouldRegister = false
 let connectionStatus: ConnectionStatus = 'disconnected'
 const connectionListeners = new Set<ConnectionListener>()
 const offlineQueue: Array<{ event: string; data: any; ack?: (res: any) => void }> = []
@@ -69,6 +69,7 @@ export function getSocket(): Socket {
       reconnectionAttempts: Infinity,
       timeout: 10000,
       transports: ['websocket', 'polling'],
+      withCredentials: true,
     })
 
     socket.on('connect', () => {
@@ -76,8 +77,8 @@ export function getSocket(): Socket {
       setConnectionStatus('connected')
 
       // Re-register on reconnect
-      if (registeredMatricula) {
-        socket?.emit('register', registeredMatricula, () => {
+      if (shouldRegister) {
+        socket?.emit('register', null, () => {
           console.log('[Socket] Re-registrado tras reconexión')
           flushOfflineQueue()
         })
@@ -113,22 +114,18 @@ export function getSocket(): Socket {
 }
 
 // ─── Register user (called from components) ─────────────────────────
-export function registerUser(matricula: number, ack?: (res: any) => void) {
-  registeredMatricula = matricula
+export function registerUser(ack?: (res: any) => void) {
+  shouldRegister = true
   const s = getSocket()
   if (s.connected) {
-    s.emit('register', matricula, ack)
+    s.emit('register', null, ack)
   }
   // If not connected, will auto-register on connect
 }
 
-export function getRegisteredMatricula(): number | null {
-  return registeredMatricula
-}
-
 export function disconnectSocket() {
   if (socket) {
-    registeredMatricula = null
+    shouldRegister = false
     offlineQueue.length = 0
     socket.disconnect()
     socket = null

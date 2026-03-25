@@ -1,6 +1,7 @@
 const { createServer } = require('http')
 const { Server } = require('socket.io')
 const { Pool } = require('pg')
+const { jwtVerify } = require('jose')
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://uniconnect:987654321@64.23.168.72:5432/tinder'
@@ -36,6 +37,27 @@ async function ensureSchema() {
   }
 }
 
+// ─── JWT / session helpers ───────────────────────────────────────────
+const SESSION_COOKIE = 'uniconnect_session'
+
+function parseCookie(cookieStr, name) {
+  if (!cookieStr) return null
+  const match = cookieStr.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+async function verifySessionToken(token) {
+  if (!token) return null
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+    const { payload } = await jwtVerify(token, secret)
+    if (typeof payload.matricula !== 'number') return null
+    return payload.matricula
+  } catch {
+    return null
+  }
+}
+
 // ─── Constants ───────────────────────────────────────────────────────
 const MAX_MESSAGE_LENGTH = 2000
 const RATE_LIMIT_WINDOW = 10000 // 10 seconds
@@ -54,10 +76,15 @@ const httpServer = createServer((req, res) => {
   res.end()
 })
 
+const ALLOWED_ORIGINS = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
+  : ['http://localhost:3000', 'http://127.0.0.1:3000']
+
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'],
-    methods: ['GET', 'POST']
+    origin: ALLOWED_ORIGINS,
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
   pingInterval: 15000,
   pingTimeout: 10000,
@@ -65,6 +92,18 @@ const io = new Server(httpServer, {
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
   }
+})
+
+// ─── Auth middleware ─────────────────────────────────────────────────
+io.use(async (socket, next) => {
+  const cookie = socket.handshake.headers.cookie
+  const token = parseCookie(cookie, SESSION_COOKIE)
+  const matricula = await verifySessionToken(token)
+  if (!matricula) {
+    return next(new Error('No autorizado'))
+  }
+  socket.data.matricula = matricula
+  next()
 })
 
 // ─── State ───────────────────────────────────────────────────────────
@@ -134,26 +173,10 @@ io.on('connection', (socket) => {
   console.log(`[WS] Nueva conexión: ${socket.id}`)
 
   // ── Register ──
-  socket.on('register', async (matricula, ack) => {
-    if (!matricula || typeof matricula !== 'number') {
-      if (typeof ack === 'function') ack({ error: 'Matrícula inválida' })
-      return
-    }
-
-    // Verify user exists in database
-    try {
-      const userCheck = await pool.query(
-        `SELECT matricula FROM alumnos WHERE matricula = $1`, [matricula]
-      )
-      if (userCheck.rows.length === 0) {
-        if (typeof ack === 'function') ack({ error: 'Usuario no encontrado' })
-        return
-      }
-    } catch (err) {
-      console.error('[WS] Error verifying user:', err)
-      if (typeof ack === 'function') ack({ error: 'Error de servidor' })
-      return
-    }
+  // Identity is already proven by the JWT middleware (socket.data.matricula).
+  // This event now only triggers the "user is online" setup.
+  socket.on('register', async (_, ack) => {
+    const matricula = socket.data.matricula
 
     // Setup socket metadata
     socketMeta.set(socket.id, {

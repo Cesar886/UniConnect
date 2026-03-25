@@ -5,6 +5,7 @@ import { getStudents } from '@/app/actions/students'
 import { swipeUser } from '@/app/actions/match'
 import { useApp } from '@/context/AppContext'
 import { useRouter } from 'next/navigation'
+import { safePhotoUrl } from '@/lib/sanitize'
 
 export interface Alumno {
   matricula: number
@@ -45,7 +46,7 @@ export default function Home() {
 
   const fetchAlumnosFromDB = useCallback(async () => {
     setLoading(true)
-    const data = await getStudents(myMatricula || undefined)
+    const data = await getStudents()
     setAlumnos(data || [])
     setCurrentIndex(0)
     setCurrentPhotoIndex(0)
@@ -78,7 +79,7 @@ export default function Home() {
     const liked = dir === 'right'
 
     if (myMatricula) {
-      const res = await swipeUser(myMatricula, targetAlumno.matricula, liked)
+      const res = await swipeUser(targetAlumno.matricula, liked)
       if (res.success && res.isMatch) {
         setTimeout(() => {
           setMatchData(targetAlumno)
@@ -186,7 +187,7 @@ export default function Home() {
             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border-[6px] border-white/20 shadow-2xl flex items-center justify-center overflow-hidden transform -rotate-6 relative z-10">
               {userProfile.photo ? (
                  // eslint-disable-next-line @next/next/no-img-element
-                 <img src={userProfile.photo} className="w-full h-full object-cover" alt="Me" />
+                 <img src={safePhotoUrl(userProfile.photo)} className="w-full h-full object-cover" alt="Me" />
               ) : (
                 <span className="text-white/40 text-6xl font-black">{userProfile.name.charAt(0).toUpperCase()}</span>
               )}
@@ -201,7 +202,7 @@ export default function Home() {
             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 border-[6px] border-white/20 shadow-2xl flex items-center justify-center overflow-hidden transform rotate-6 relative z-10">
               {matchData.foto_perfil ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={matchData.foto_perfil} alt={matchData.nombre} className="w-full h-full object-cover" />
+                <img src={safePhotoUrl(matchData.foto_perfil)} alt={matchData.nombre} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-white/40 text-6xl font-black">{matchData.nombre.charAt(0).toUpperCase()}</span>
               )}
@@ -246,7 +247,7 @@ export default function Home() {
   }
 
   const interesList = alumno.intereses ? alumno.intereses.split(',').map(i => i.trim()).filter(i => i) : []
-  const photos = [alumno.foto_perfil, alumno.foto2, alumno.foto3].filter(Boolean)
+  const photos = [alumno.foto_perfil, alumno.foto2, alumno.foto3].map(safePhotoUrl).filter(Boolean)
 
   // Calcular rotación y opacidad de overlays basado en drag
   const dragRotation = isDragging ? dragX * 0.05 : 0

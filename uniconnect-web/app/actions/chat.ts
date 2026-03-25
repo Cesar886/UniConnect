@@ -1,6 +1,7 @@
 'use server'
 
 import pool from '@/lib/db';
+import { getSession } from '@/lib/session';
 
 const MAX_MESSAGE_LENGTH = 2000
 const EDIT_WINDOW_MS = 20 * 60 * 1000 // 20 minutes
@@ -18,8 +19,13 @@ async function areMutualMatches(user1: number, user2: number): Promise<boolean> 
   return (res.rowCount ?? 0) > 0;
 }
 
-export async function getMessages(user1: number, user2: number) {
+export async function getMessages(peerId: number) {
   try {
+    const session = await getSession();
+    if (!session) return [];
+    const user1 = session.matricula;
+    const user2 = peerId;
+
     if (!user1 || !user2 || user1 === user2) return [];
 
     const matched = await areMutualMatches(user1, user2);
@@ -46,8 +52,11 @@ export async function getMessages(user1: number, user2: number) {
 }
 
 // Total de mensajes no leídos de todos los matches
-export async function getUnreadCount(matricula: number) {
+export async function getUnreadCount() {
   try {
+    const session = await getSession();
+    if (!session) return 0;
+    const matricula = session.matricula;
     if (!matricula) return 0;
 
     const query = `
@@ -71,8 +80,12 @@ export async function getUnreadCount(matricula: number) {
   }
 }
 
-export async function sendMessage(senderId: number, receiverId: number, text: string) {
+export async function sendMessage(receiverId: number, text: string) {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'No autenticado' };
+    const senderId = session.matricula;
+
     if (!senderId || !receiverId || senderId === receiverId) {
       return { success: false, error: 'Usuarios inválidos' };
     }
@@ -103,8 +116,12 @@ export async function sendMessage(senderId: number, receiverId: number, text: st
   }
 }
 
-export async function editMessage(userId: number, messageId: number, newText: string) {
+export async function editMessage(messageId: number, newText: string) {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'No autenticado' };
+    const userId = session.matricula;
+
     if (!userId || !messageId) {
       return { success: false, error: 'Parámetros inválidos' };
     }
@@ -145,8 +162,12 @@ export async function editMessage(userId: number, messageId: number, newText: st
   }
 }
 
-export async function deleteMessage(userId: number, messageId: number) {
+export async function deleteMessage(messageId: number) {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'No autenticado' };
+    const userId = session.matricula;
+
     if (!userId || !messageId) {
       return { success: false, error: 'Parámetros inválidos' };
     }
@@ -178,10 +199,13 @@ export async function deleteMessage(userId: number, messageId: number) {
 }
 
 // Check if a specific user is a mutual match (for chat page guard)
-export async function isMatch(user1: number, user2: number): Promise<boolean> {
+export async function isMatch(peerId: number): Promise<boolean> {
   try {
-    if (!user1 || !user2 || user1 === user2) return false;
-    return await areMutualMatches(user1, user2);
+    const session = await getSession();
+    if (!session) return false;
+    const user1 = session.matricula;
+    if (!user1 || !peerId || user1 === peerId) return false;
+    return await areMutualMatches(user1, peerId);
   } catch {
     return false;
   }

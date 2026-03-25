@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { getProfile } from '@/app/actions/students'
 import { getMessages, isMatch } from '@/app/actions/chat'
 import { getSocket, registerUser, emitOrQueue, onConnectionChange } from '@/lib/socket'
+import { safePhotoUrl } from '@/lib/sanitize'
 
 const MAX_MESSAGE_LENGTH = 2000
 
@@ -112,7 +113,7 @@ function ChatContent() {
   const peerIdParam = searchParams.get('id')
   const peerId = peerIdParam ? parseInt(peerIdParam, 10) : null
 
-  const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].filter(Boolean) : []
+  const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].map(safePhotoUrl).filter(Boolean) : []
   const interesList = peerProfile && peerProfile.intereses ? peerProfile.intereses.split(',').map((i: string) => i.trim()).filter(Boolean) : []
 
   // Format last seen
@@ -145,14 +146,14 @@ function ChatContent() {
   // 1. Load profile and history (only if mutual match)
   useEffect(() => {
     if (!myMatricula || !peerId) return
-    isMatch(myMatricula, peerId).then(matched => {
+    isMatch(peerId).then(matched => {
       if (!matched) {
         setNotMatch(true)
         setLoading(false)
         return
       }
       getProfile(peerId).then(data => { if (data) setPeerProfile(data) })
-      getMessages(myMatricula, peerId).then(data => { setMessages(data || []); setLoading(false) })
+      getMessages(peerId).then(data => { setMessages(data || []); setLoading(false) })
     })
   }, [myMatricula, peerId])
 
@@ -170,7 +171,7 @@ function ChatContent() {
     const socket = getSocket()
 
     // Register user (handles reconnection automatically)
-    registerUser(myMatricula)
+    registerUser()
 
     // Mark as read
     socket.emit('chat:read', { myId: myMatricula, peerId })
@@ -483,7 +484,7 @@ function ChatContent() {
         <div onClick={() => setShowProfile(true)} className="relative w-11 h-11 rounded-full overflow-hidden shrink-0 shadow-sm border-2 border-white bg-gradient-to-tr from-pink-300 to-violet-400 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
           {peerProfile.foto_perfil ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={peerProfile.foto_perfil} alt={peerProfile.nombre} className="w-full h-full object-cover" />
+            <img src={safePhotoUrl(peerProfile.foto_perfil)} alt={peerProfile.nombre} className="w-full h-full object-cover" />
           ) : (
              <span className="text-xl font-black text-white">{peerProfile.nombre.charAt(0)}</span>
           )}
@@ -528,7 +529,7 @@ function ChatContent() {
             <div className="absolute inset-[3px] bg-white rounded-full overflow-hidden flex items-center justify-center">
               {peerProfile.foto_perfil ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={peerProfile.foto_perfil} alt="" className="w-full h-full object-cover" />
+                <img src={safePhotoUrl(peerProfile.foto_perfil)} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-5xl font-black text-gray-300">{peerProfile.nombre.charAt(0)}</span>
               )}
