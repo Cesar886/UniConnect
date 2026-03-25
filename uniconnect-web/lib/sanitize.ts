@@ -6,7 +6,7 @@ export function safePhotoUrl(url: string | null | undefined): string {
   if (!url || typeof url !== 'string') return ''
   const trimmed = url.trim()
   if (
-    trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith('/') ||
     trimmed.startsWith('https://') ||
     trimmed.startsWith('http://')
   ) {

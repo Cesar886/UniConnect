@@ -2,12 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useApp } from '@/context/AppContext'
 import { getUnreadCount } from '@/app/actions/chat'
 import { getSocket, registerUser, onConnectionChange } from '@/lib/socket'
 
-export default function Navbar() {
+function NavbarContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { userProfile } = useApp()
@@ -96,6 +96,14 @@ export default function Navbar() {
         </Link>
       </div>
     </nav>
+  )
+}
+
+export default function Navbar() {
+  return (
+    <Suspense fallback={null}>
+      <NavbarContent />
+    </Suspense>
   )
 }
 
