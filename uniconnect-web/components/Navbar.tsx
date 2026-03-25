@@ -2,47 +2,19 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
 import { useApp } from '@/context/AppContext'
-import { getUnreadCount } from '@/app/actions/chat'
-import { getSocket, registerUser, onConnectionChange } from '@/lib/socket'
+
+const navItems = [
+  { href: '/', label: 'Feed', icon: HomeIcon },
+  { href: '/matches', label: 'Matches', icon: HeartIcon },
+  { href: '/profile', label: 'Perfil', icon: UserIcon },
+]
 
 export default function Navbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { userProfile } = useApp()
-  const [unread, setUnread] = useState(0)
 
-  useEffect(() => {
-    if (!userProfile.matricula) return
-
-    const socket = getSocket()
-    registerUser()
-
-    // Initial load
-    getUnreadCount().then(count => setUnread(count))
-
-    // Listen for real-time updates
-    const onUnreadUpdate = (count: number) => {
-      setUnread(count)
-    }
-
-    // Re-fetch on reconnect
-    const unsubConnection = onConnectionChange((status) => {
-      if (status === 'connected' && userProfile.matricula) {
-        getUnreadCount().then(count => setUnread(count))
-      }
-    })
-
-    socket.on('unread:update', onUnreadUpdate)
-
-    return () => {
-      socket.off('unread:update', onUnreadUpdate)
-      unsubConnection()
-    }
-  }, [userProfile.matricula])
-
-  // No mostrar navbar en login/register, o dentro de un chat
   if (
      pathname === '/login' ||
      pathname === '/register' ||
@@ -52,50 +24,31 @@ export default function Navbar() {
     return null
   }
 
+  const adminItem = { href: '/admin', label: 'Panel', icon: AdminIcon }
+  const displayItems = userProfile?.is_admin ? [...navItems, adminItem] : navItems
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
-      <div className="max-w-lg mx-auto flex justify-around items-center h-16">
-        {/* Inicio */}
-        <Link
-          href="/"
-          className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
-            pathname === '/' ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
-          }`}
-        >
-          <HomeIcon active={pathname === '/'} />
-          <span className="text-xs font-medium">Inicio</span>
-        </Link>
-
-        {/* Matches con badge en tiempo real */}
-        <Link
-          href="/matches"
-          className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors relative ${
-            pathname === '/matches' ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
-          }`}
-        >
-          <div className="relative">
-            <HeartIcon active={pathname === '/matches'} />
-            {unread > 0 && (
-              <span className="absolute -top-1.5 -right-2.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-pink-500 px-1 text-[10px] font-black text-white shadow-md shadow-pink-500/40 animate-in zoom-in duration-200">
-                {unread > 99 ? '99+' : unread}
-              </span>
-            )}
-          </div>
-          <span className="text-xs font-medium">Matches</span>
-        </Link>
-
-        {/* Perfil */}
-        <Link
-          href="/profile"
-          className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
-            pathname === '/profile' ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600'
-          }`}
-        >
-          <UserIcon active={pathname === '/profile'} />
-          <span className="text-xs font-medium">Perfil</span>
-        </Link>
-      </div>
-    </nav>
+    <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <nav className="bg-white/85 backdrop-blur-xl border border-white/50 shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-full px-8 py-3.5 flex items-center gap-10 pointer-events-auto">
+        {displayItems.map((item) => {
+          const isActive = pathname === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`relative flex flex-col items-center gap-1 transition-all duration-300 ${
+                isActive ? 'text-[#ba0034] scale-110' : 'text-gray-400 hover:text-[#e51245] hover:scale-105'
+              }`}
+            >
+              <item.icon active={isActive} />
+              {isActive && (
+                <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-gradient-to-tr from-[#ba0034] to-[#e51245] rounded-full shadow-sm"></span>
+              )}
+            </Link>
+          )
+        })}
+      </nav>
+    </div>
   )
 }
 
@@ -110,7 +63,7 @@ function HomeIcon({ active }: { active: boolean }) {
 
 function HeartIcon({ active }: { active: boolean }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-7 h-7">
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
     </svg>
   )
@@ -120,6 +73,14 @@ function UserIcon({ active }: { active: boolean }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    </svg>
+  )
+}
+
+function AdminIcon({ active }: { active: boolean }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
     </svg>
   )
 }

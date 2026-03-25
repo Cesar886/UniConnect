@@ -4,11 +4,8 @@ import { useState, useEffect, useRef, Suspense, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getProfile } from '@/app/actions/students'
-import { getMessages, isMatch } from '@/app/actions/chat'
-import { getSocket, registerUser, emitOrQueue, onConnectionChange } from '@/lib/socket'
-import { safePhotoUrl } from '@/lib/sanitize'
-
-const MAX_MESSAGE_LENGTH = 2000
+import { getMessages, sendMessage } from '@/app/actions/chat'
+import { createReport } from '@/app/actions/report'
 
 interface ChatMessage {
   id: number
@@ -98,14 +95,10 @@ function ChatContent() {
   const [showProfile, setShowProfile] = useState(false)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [isTyping, setIsTyping] = useState(false)
-  const [notMatch, setNotMatch] = useState(false)
-  const [peerOnline, setPeerOnline] = useState(false)
-  const [peerLastSeen, setPeerLastSeen] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ msgId: number; x: number; y: number } | null>(null)
-  const [editingMsg, setEditingMsg] = useState<{ id: number; text: string } | null>(null)
-  const [editText, setEditText] = useState('')
-  const [connectionStatus, setConnectionStatus] = useState<string>('connecting')
+  const [showReport, setShowReport] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [isReporting, setIsReporting] = useState(false)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const tempIdCounter = useRef(0)
@@ -116,34 +109,6 @@ function ChatContent() {
   const peerPhotos = peerProfile ? [peerProfile.foto_perfil, peerProfile.foto2, peerProfile.foto3].map(safePhotoUrl).filter(Boolean) : []
   const interesList = peerProfile && peerProfile.intereses ? peerProfile.intereses.split(',').map((i: string) => i.trim()).filter(Boolean) : []
 
-  // Format last seen
-  const formatLastSeen = (dateStr: string | null) => {
-    if (!dateStr) return 'Desconectado'
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    const diffHrs = Math.floor(diffMs / 3600000)
-
-    if (diffMin < 1) return 'Últ. vez hace un momento'
-    if (diffMin < 60) return `Últ. vez hace ${diffMin} min`
-    if (diffHrs < 24) return `Últ. vez hace ${diffHrs}h`
-    return `Últ. vez ${date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
-  }
-
-  // Check if message is within 20 min edit/delete window
-  const isWithinEditWindow = (msg: ChatMessage) => {
-    if (!msg.created_at) return false
-    const created = new Date(msg.created_at).getTime()
-    const now = Date.now()
-    return (now - created) < 20 * 60 * 1000
-  }
-
-  // Character count
-  const charCount = newMessage.length
-  const isOverLimit = charCount > MAX_MESSAGE_LENGTH
-
-  // 1. Load profile and history (only if mutual match)
   useEffect(() => {
     if (!myMatricula || !peerId) return
     isMatch(peerId).then(matched => {
@@ -157,143 +122,16 @@ function ChatContent() {
     })
   }, [myMatricula, peerId])
 
-  // 2. Connection status listener
   useEffect(() => {
-    return onConnectionChange((status) => {
-      setConnectionStatus(status)
-    })
-  }, [])
+    if (!myMatricula || !peerId || loading) return
+    const interval = setInterval(() => {
+      getMessages(myMatricula, peerId).then(data => {
+        setMessages(prev => (data.length !== prev.length ? data : prev))
+      })
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [myMatricula, peerId, loading])
 
-  // 3. WebSocket: listen for messages, typing, online, status, edit, delete
-  useEffect(() => {
-    if (!myMatricula || !peerId) return
-
-    const socket = getSocket()
-
-    // Register user (handles reconnection automatically)
-    registerUser()
-
-    // Mark as read
-    socket.emit('chat:read', { myId: myMatricula, peerId })
-
-    // Check if peer is online
-    socket.emit('user:check', peerId)
-
-    // Get last seen if offline
-    socket.emit('user:lastSeen', peerId, (res: any) => {
-      if (res?.lastSeen) setPeerLastSeen(res.lastSeen)
-    })
-
-    // New message in real time
-    const onNewMessage = (msg: ChatMessage) => {
-      if (
-        (msg.sender_id === myMatricula && msg.receiver_id === peerId) ||
-        (msg.sender_id === peerId && msg.receiver_id === myMatricula)
-      ) {
-        setMessages(prev => {
-          // Replace optimistic message by tempId
-          if (msg.tempId) {
-            const idx = prev.findIndex(m => m.tempId === msg.tempId)
-            if (idx !== -1) {
-              const updated = [...prev]
-              updated[idx] = { ...msg, tempId: undefined }
-              return updated
-            }
-          }
-          // Avoid duplicates by id
-          if (prev.some(m => m.id === msg.id)) return prev
-          return [...prev, msg]
-        })
-        // If I received a message, mark as read
-        if (msg.sender_id === peerId) {
-          socket.emit('chat:read', { myId: myMatricula, peerId })
-        }
-        setIsTyping(false)
-      }
-    }
-
-    // Status updates (sent -> delivered -> read)
-    const onStatusUpdate = ({ messageIds, status }: { messageIds: number[]; status: string }) => {
-      setMessages(prev =>
-        prev.map(m =>
-          messageIds.includes(m.id) ? { ...m, status: status as ChatMessage['status'] } : m
-        )
-      )
-    }
-
-    // Message edited
-    const onMessageEdited = (msg: ChatMessage) => {
-      setMessages(prev =>
-        prev.map(m => m.id === msg.id ? { ...m, text: msg.text, edited_at: msg.edited_at } : m)
-      )
-    }
-
-    // Message deleted
-    const onMessageDeleted = ({ messageId }: { messageId: number }) => {
-      setMessages(prev => prev.filter(m => m.id !== messageId))
-    }
-
-    // Typing
-    const onTypingShow = ({ senderId }: { senderId: number }) => {
-      if (senderId === peerId) setIsTyping(true)
-    }
-    const onTypingHide = ({ senderId }: { senderId: number }) => {
-      if (senderId === peerId) setIsTyping(false)
-    }
-
-    // Online status
-    const onUserOnline = ({ matricula, online }: { matricula: number; online: boolean }) => {
-      if (matricula === peerId) {
-        setPeerOnline(online)
-        if (!online) {
-          // Refresh last seen when they go offline
-          setPeerLastSeen(new Date().toISOString())
-        } else {
-          setPeerLastSeen(null)
-        }
-      }
-    }
-
-    // Error
-    const onError = ({ error, tempId }: { error: string; tempId?: string }) => {
-      // Remove failed optimistic message
-      if (tempId) {
-        setMessages(prev => prev.filter(m => m.tempId !== tempId))
-      }
-      alert(error)
-    }
-
-    socket.on('message:new', onNewMessage)
-    socket.on('message:status', onStatusUpdate)
-    socket.on('message:edited', onMessageEdited)
-    socket.on('message:deleted', onMessageDeleted)
-    socket.on('typing:show', onTypingShow)
-    socket.on('typing:hide', onTypingHide)
-    socket.on('user:online', onUserOnline)
-    socket.on('message:error', onError)
-
-    return () => {
-      socket.off('message:new', onNewMessage)
-      socket.off('message:status', onStatusUpdate)
-      socket.off('message:edited', onMessageEdited)
-      socket.off('message:deleted', onMessageDeleted)
-      socket.off('typing:show', onTypingShow)
-      socket.off('typing:hide', onTypingHide)
-      socket.off('user:online', onUserOnline)
-      socket.off('message:error', onError)
-    }
-  }, [myMatricula, peerId])
-
-  // Close context menu on outside click
-  useEffect(() => {
-    const handler = () => setContextMenu(null)
-    if (contextMenu) {
-      window.addEventListener('click', handler)
-      return () => window.removeEventListener('click', handler)
-    }
-  }, [contextMenu])
-
-  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping])
@@ -362,14 +200,18 @@ function ChatContent() {
     }
   }
 
-  // Long press / right click for context menu
-  const handleMessageContext = (e: React.MouseEvent | React.TouchEvent, msg: ChatMessage) => {
-    if (msg.sender_id !== myMatricula) return
-    if (!isWithinEditWindow(msg)) return
-    e.preventDefault()
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
-    setContextMenu({ msgId: msg.id, x: clientX, y: clientY })
+  const handleReportAction = async () => {
+    if (!reportReason || !myMatricula || !peerId) return;
+    setIsReporting(true);
+    const res = await createReport(myMatricula, peerId, reportReason);
+    setIsReporting(false);
+    if (res.success) {
+      alert("Reporte enviado de forma anónima. Nuestro equipo de moderación lo revisará.");
+      setShowReport(false);
+      setReportReason('');
+    } else {
+      alert("Ocurrió un error al enviar el reporte: " + res.error);
+    }
   }
 
   if (!myMatricula || !peerId) {
@@ -404,6 +246,44 @@ function ChatContent() {
 
   return (
     <div className="min-h-[100dvh] bg-[#FDFDFD] flex flex-col font-sans relative">
+      
+      {/* REPORT MODAL */}
+      {showReport && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-black text-gray-900 mb-2">Reportar a {peerProfile.nombre}</h2>
+            <p className="text-sm text-gray-500 mb-4 font-medium">La seguridad es nuestra prioridad. Escoge un motivo para advertir a los administradores de la universidad.</p>
+            <select 
+              value={reportReason} 
+              onChange={e => setReportReason(e.target.value)} 
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-6 text-gray-700 outline-none font-medium"
+            >
+              <option value="">Selecciona un motivo...</option>
+              <option value="Acoso o lenguaje inapropiado">Acoso o lenguaje inapropiado</option>
+              <option value="Perfil Falso / Catfish">Perfil Falso / Catfish</option>
+              <option value="Spam / Publicidad">Spam o Publicidad comercial</option>
+              <option value="Comportamiento agresivo">Comportamiento peligroso</option>
+              <option value="Otro motivo">Otro motivo</option>
+            </select>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowReport(false)} 
+                className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleReportAction}
+                disabled={!reportReason || isReporting}
+                className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors flex justify-center items-center"
+              >
+                {isReporting ? 'Enviando...' : 'Enviar Reporte'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PERFIL MODAL */}
       {showProfile && peerProfile && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex flex-col justify-end md:items-center md:justify-center font-sans animate-in fade-in duration-300">
@@ -488,30 +368,17 @@ function ChatContent() {
           ) : (
              <span className="text-xl font-black text-white">{peerProfile.nombre.charAt(0)}</span>
           )}
-          {peerOnline && (
-            <div className="absolute border-2 border-white bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full shadow-sm"></div>
-          )}
+          <div className="absolute border-2 border-white bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full shadow-sm"></div>
         </div>
         <div className="flex-1 overflow-hidden flex flex-col justify-center">
           <h2 onClick={() => setShowProfile(true)} className="font-extrabold text-gray-800 text-[17px] truncate leading-tight tracking-tight cursor-pointer">{peerProfile.nombre.split(' ')[0]}</h2>
-          {isTyping ? (
-            <p className="text-[12px] text-pink-500 font-bold tracking-widest uppercase flex items-center gap-1">
-              Escribiendo
-              <span className="flex gap-0.5">
-                <span className="w-1 h-1 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-1 h-1 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-1 h-1 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-              </span>
-            </p>
-          ) : peerOnline ? (
-            <p className="text-[12px] text-green-500 font-bold tracking-widest uppercase">En línea</p>
-          ) : (
-            <p className="text-[12px] text-gray-400 font-medium">{formatLastSeen(peerLastSeen)}</p>
-          )}
+          <p className="text-[12px] text-green-500 font-bold tracking-widest uppercase">En Línea</p>
         </div>
-        <button onClick={() => setShowProfile(true)} className="p-2 hover:bg-white/50 rounded-full transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
+        
+        {/* REPORT BUTTON */}
+        <button onClick={() => setShowReport(true)} className="p-2 hover:bg-red-50 rounded-full transition-colors opacity-70 group bg-white shadow-sm border border-gray-100">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </button>
       </div>

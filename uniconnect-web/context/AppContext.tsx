@@ -14,6 +14,7 @@ interface UserProfile {
   interests: string[]
   photo: string
   photos: string[]
+  is_admin?: boolean
 }
 
 interface AppContextType {
@@ -41,28 +42,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     interests: [],
     photo: '',
     photos: ['', '', ''],
+    is_admin: false,
   })
 
   useEffect(() => {
-    getCurrentSession().then(async (session) => {
-      if (!session) return
-      setIsLoggedIn(true)
-      const data: any = await getProfile(session.matricula)
-      if (data) {
-        setUserProfile(prev => ({
-          ...prev,
-          matricula: session.matricula,
-          name: data.nombre,
-          age: data.edad || 18,
-          career: data.carrera || '',
-          semester: data.semestre || 1,
-          bio: data.bio || '',
-          interests: data.intereses ? data.intereses.split(',').map((s: string) => s.trim()) : [],
-          photo: data.foto_perfil || '',
-          photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
-        }))
-      } else {
-        setUserProfile(prev => ({ ...prev, matricula: session.matricula }))
+    // Basic client-side hidration
+    if (typeof window !== 'undefined') {
+      const savedMatricula = localStorage.getItem('uniconnect_session_id')
+      if (savedMatricula) {
+        setIsLoggedIn(true)
+        const matNum = parseInt(savedMatricula, 10)
+        
+        getProfile(matNum).then((data: any) => {
+          if (data) {
+             setUserProfile(prev => ({
+               ...prev,
+               matricula: matNum,
+               name: data.nombre,
+               age: data.edad || 18,
+               career: data.carrera || '',
+               semester: data.semestre || 1,
+               bio: data.bio || '',
+               interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
+               photo: data.foto_perfil || '',
+               photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+               is_admin: data.is_admin || false,
+             }))
+          } else {
+             setUserProfile(prev => ({...prev, matricula: matNum}))
+          }
+        })
       }
     })
   }, [])
@@ -74,18 +83,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Aquí solo cargamos el perfil en el estado del cliente.
       const data: any = await getProfile(matricula)
       if (data) {
-        setUserProfile(prev => ({
-          ...prev,
-          matricula,
-          name: data.nombre,
-          age: data.edad || 18,
-          career: data.carrera || '',
-          semester: data.semestre || 1,
-          bio: data.bio || '',
-          interests: data.intereses ? data.intereses.split(',').map((s: string) => s.trim()) : [],
-          photo: data.foto_perfil || '',
-          photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
-        }))
+         setUserProfile(prev => ({
+           ...prev,
+           matricula,
+           name: data.nombre,
+           age: data.edad || 18,
+           career: data.carrera || '',
+           semester: data.semestre || 1,
+           bio: data.bio || '',
+           interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
+           photo: data.foto_perfil || '',
+           photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+           is_admin: data.is_admin || false,
+         }))
       } else {
         setUserProfile(prev => ({ ...prev, matricula }))
       }

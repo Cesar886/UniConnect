@@ -7,6 +7,7 @@ import { useApp } from '@/context/AppContext'
 import { useRouter } from 'next/navigation'
 import { safePhotoUrl } from '@/lib/sanitize'
 
+// Tipos
 export interface Alumno {
   matricula: number
   nombre: string
@@ -32,9 +33,7 @@ export default function Home() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [direction, setDirection] = useState<'left' | 'right' | null>(null)
   const [loading, setLoading] = useState(true)
-  const [swiping, setSwiping] = useState(false)
-
-  // Match Modal State
+  const [likes, setLikes] = useState<number[]>([])
   const [matchData, setMatchData] = useState<Alumno | null>(null)
 
   // Touch swipe
@@ -78,23 +77,26 @@ export default function Home() {
     const targetAlumno = alumnos[currentIndex]
     const liked = dir === 'right'
 
+    if (liked) setLikes(prev => [...prev, targetAlumno.matricula])
+    
     if (myMatricula) {
       const res = await swipeUser(targetAlumno.matricula, liked)
       if (res.success && res.isMatch) {
-        setTimeout(() => {
-          setMatchData(targetAlumno)
-          setDirection(null)
-          setDragX(0)
-          setSwiping(false)
-        }, 350)
-        return
+         setTimeout(() => setMatchData(targetAlumno), 300)
       }
     }
-
-    setTimeout(() => {
-      advanceCard()
-      setSwiping(false)
-    }, 300)
+    
+    if (!matchData) {
+      setTimeout(() => {
+        setDirection(null)
+        if (currentIndex < alumnos.length - 1) {
+          setCurrentIndex(prev => prev + 1)
+          setCurrentPhotoIndex(0)
+        } else {
+          fetchAlumnosFromDB()
+        }
+      }, 300)
+    }
   }
 
   const closeMatchModal = () => {
@@ -159,71 +161,64 @@ export default function Home() {
 
   const alumno = alumnos[currentIndex]
 
+  // CARGANDO
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 flex-col font-sans">
-        <div className="inline-block h-14 w-14 animate-spin rounded-full border-[5px] border-pink-100 border-t-pink-500 mb-6 drop-shadow-md"></div>
-        <p className="text-xl text-gray-400 font-bold tracking-widest uppercase animate-pulse">Buscando en el campus...</p>
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f8f9fa] flex-col font-sans">
+        <div className="relative w-20 h-20 mb-8">
+          <div className="absolute inset-0 rounded-full border-4 border-[#e51245]/20"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-[#ba0034] border-t-transparent animate-spin"></div>
+        </div>
+        <p className="text-sm font-bold tracking-[0.2em] text-gray-400 uppercase">Encontrando perfiles</p>
       </div>
     )
   }
 
-  // PANTALLA DE MATCH
+  // PANTALLA DE MATCH (DISEÑO EDITORIAL)
   if (matchData) {
     return (
-      <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center font-sans animate-in fade-in duration-500 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-pink-600/40 via-purple-600/40 to-indigo-600/40 backdrop-blur-md"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-2xl bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-pink-500/50 via-transparent to-transparent blur-3xl saturate-200 pointer-events-none"></div>
+      <div className="fixed inset-0 z-50 bg-[#191c1d] flex flex-col items-center justify-center font-sans overflow-hidden">
+        {/* Abstract Background Elements */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-[#ba0034]/40 via-transparent to-transparent opacity-80"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-[#e51245]/30 via-transparent to-transparent opacity-60"></div>
 
-        <div className="relative z-10 flex flex-col items-center p-6 text-center">
-          <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 via-pink-400 to-rose-500 drop-shadow-[0_0_20px_rgba(236,72,153,0.8)] tracking-tighter mb-4 animate-in zoom-in slide-in-from-bottom-10 duration-700">
-            ¡MATCH!
+        <div className="relative z-10 flex flex-col items-center px-6 text-center w-full max-w-lg">
+          <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-2 animate-in slide-in-from-bottom-5 duration-700">
+            ES UN <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#e51245] to-[#ffb3b5]">MATCH.</span>
           </h1>
-          <p className="text-xl md:text-2xl font-bold text-white/90 mb-12 animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-300">
-            Tú y {matchData.nombre} se gustaron
+          <p className="text-lg text-gray-300 font-medium mb-16 animate-in fade-in duration-1000 delay-300">
+            Tú y {matchData.nombre} se atraen mutuamente.
           </p>
 
-          <div className="flex items-center gap-6 md:gap-10 mb-12 animate-in zoom-in-50 duration-700 delay-150">
-            <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border-[6px] border-white/20 shadow-2xl flex items-center justify-center overflow-hidden transform -rotate-6 relative z-10">
+          <div className="flex items-center justify-center mb-16 relative w-full h-40">
+            {/* Mi Foto */}
+            <div className="absolute left-[15%] w-36 h-36 rounded-full bg-[#2e3132] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-[#191c1d] z-10 transform -rotate-6 animate-in zoom-in-50 duration-500 delay-150">
               {userProfile.photo ? (
-                 // eslint-disable-next-line @next/next/no-img-element
-                 <img src={safePhotoUrl(userProfile.photo)} className="w-full h-full object-cover" alt="Me" />
+                 <img src={userProfile.photo} className="w-full h-full object-cover" alt="Me" />
               ) : (
-                <span className="text-white/40 text-6xl font-black">{userProfile.name.charAt(0).toUpperCase()}</span>
+                <span className="text-gray-500 text-4xl font-black">{userProfile.name?.charAt(0)}</span>
               )}
             </div>
-
-            <div className="text-rose-500 animate-pulse drop-shadow-[0_0_30px_rgba(244,63,94,1)] relative z-0 -mx-6 md:-mx-10 mt-6">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-16 h-16 md:w-20 md:h-20">
-                <path d="m11.645 20.91-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" />
-              </svg>
-            </div>
-
-            <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 border-[6px] border-white/20 shadow-2xl flex items-center justify-center overflow-hidden transform rotate-6 relative z-10">
+            
+            {/* Foto del Match */}
+            <div className="absolute right-[15%] w-36 h-36 rounded-full bg-[#2e3132] shadow-2xl flex items-center justify-center overflow-hidden border-4 border-[#191c1d] z-20 transform rotate-6 animate-in zoom-in-50 duration-500 delay-300">
               {matchData.foto_perfil ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={safePhotoUrl(matchData.foto_perfil)} alt={matchData.nombre} className="w-full h-full object-cover" />
+                <img src={matchData.foto_perfil} alt={matchData.nombre} className="w-full h-full object-cover" />
               ) : (
-                <span className="text-white/40 text-6xl font-black">{matchData.nombre.charAt(0).toUpperCase()}</span>
+                <span className="text-gray-500 text-4xl font-black">{matchData.nombre.charAt(0)}</span>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 w-full max-w-xs animate-in slide-in-from-bottom-10 fade-in duration-1000 delay-500">
-            <button
-              onClick={() => {
-                setMatchData(null)
-                router.push(`/chat?id=${matchData.matricula}`)
-              }}
-              className="w-full py-5 rounded-full font-black text-lg bg-white text-pink-600 hover:bg-gray-100 hover:scale-105 shadow-[0_0_40px_rgba(255,255,255,0.4)] transition-all active:scale-95"
-            >
+          <div className="flex flex-col gap-4 w-full animate-in slide-in-from-bottom-10 fade-in duration-1000 delay-700">
+            <button className="w-full py-4 rounded-full font-bold text-[15px] tracking-wide text-white bg-gradient-to-tr from-[#ba0034] to-[#e51245] shadow-[0_8px_20px_rgba(186,0,52,0.4)] hover:brightness-110 transition-all">
               Enviar Mensaje
             </button>
             <button
               onClick={closeMatchModal}
-              className="w-full py-4 rounded-full font-bold text-lg border-2 border-white/30 text-white hover:bg-white/10 transition-colors active:scale-95"
+              className="w-full py-4 rounded-full font-semibold text-[15px] bg-[#2e3132] text-gray-300 hover:bg-gray-700 transition-colors"
             >
-              Seguir Deslizando
+              Seguir Explorando
             </button>
           </div>
         </div>
@@ -231,16 +226,19 @@ export default function Home() {
     )
   }
 
+  // NO HAY NADIE
   if (!alumno) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 flex-col font-sans gap-4">
-        <div className="inline-block h-14 w-14 animate-spin rounded-full border-[5px] border-pink-100 border-t-pink-500 mb-2 drop-shadow-md"></div>
-        <p className="text-xl text-gray-400 font-bold tracking-widest uppercase animate-pulse">Cargando más perfiles...</p>
-        <button
-          onClick={fetchAlumnosFromDB}
-          className="mt-2 px-6 py-3 rounded-full bg-pink-500 text-white font-bold hover:bg-pink-600 transition-colors"
-        >
-          Reintentar
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f8f9fa] flex-col font-sans px-6">
+        <div className="w-24 h-24 rounded-full bg-[#f0f1f2] flex items-center justify-center mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-gray-400">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-black text-[#191c1d] tracking-tight mb-2">No hay perfiles</h2>
+        <p className="text-[#585d7e] text-center max-w-[260px] mb-8 font-medium">Has visto a todos los estudiantes disponibles en el campus. Vuelve más tarde.</p>
+        <button onClick={fetchAlumnosFromDB} className="px-8 py-3.5 rounded-full bg-white text-[#ba0034] font-bold shadow-[0_4px_14px_rgba(0,0,0,0.05)] hover:shadow-md transition-all border border-[#e1e3e4]">
+          Actualizar Feed
         </button>
       </div>
     )
@@ -255,146 +253,156 @@ export default function Home() {
   const showNopeOverlay = dragX < -50
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center bg-gray-50 px-4 pt-4 pb-4 md:pt-8 md:pb-20 font-sans overflow-hidden">
+    <div className="flex min-h-[100dvh] flex-col items-center bg-[#f8f9fa] px-4 pt-4 pb-24 md:pt-6 font-sans overflow-hidden">
+      
+      {/* TOP NAV "EDITORIAL" */}
+      <div className="w-full max-w-[420px] mb-5 flex justify-between items-center px-1 z-10">
+        <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#e1e3e4] overflow-hidden">
+          {userProfile?.photo ? (
+            <img src={userProfile.photo} className="w-full h-full object-cover" alt="Me" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[#585d7e] font-bold bg-[#f0f1f2]">
+              {userProfile?.name?.charAt(0)}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex flex-col items-center">
+          <h1 className="text-[22px] font-black tracking-tighter text-[#191c1d] leading-none">
+            UniConnect<span className="text-[#ba0034]">.</span>
+          </h1>
+          <span className="text-[9px] font-bold tracking-[0.2em] text-[#916e6f] uppercase mt-1">The Pulse</span>
+        </div>
 
-      <div className="w-full max-w-sm mb-4 md:mb-6 flex justify-between items-center">
-        <h1 className="text-3xl font-black bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent tracking-tighter">
-          UniConnect
-        </h1>
+        <button className="w-10 h-10 rounded-full bg-white border border-[#e1e3e4] shadow-sm flex items-center justify-center text-[#585d7e] focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+          </svg>
+        </button>
       </div>
 
-      {/* TINDER CARD */}
-      <div className="relative w-full max-w-sm flex-1 max-h-[700px] flex items-center justify-center pointer-events-none mb-4">
+      {/* SWIPE CARD CONTAINER (Ivy Pulse Style) */}
+      <div className="relative w-full max-w-[420px] max-h-[750px] flex-1 flex items-center justify-center pointer-events-none z-20">
         <div
-          ref={cardRef}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          style={
-            isDragging
-              ? { transform: `translateX(${dragX}px) rotate(${dragRotation}deg)`, transition: 'none' }
-              : undefined
-          }
-          className={`absolute w-full h-full pointer-events-auto ${
-            !isDragging ? 'transition-all duration-300' : ''
-          } ${
-            direction === 'left' ? '-translate-x-[150%] -rotate-12 opacity-0' :
-            direction === 'right' ? 'translate-x-[150%] rotate-12 opacity-0' : ''
-          } ${!direction && !isDragging ? 'translate-x-0 rotate-0 opacity-100' : ''}`}
+          className={`absolute w-full h-full transition-all duration-300 pointer-events-auto ${
+            direction === 'left' ? '-translate-x-[120%] -rotate-6 opacity-0' :
+            direction === 'right' ? 'translate-x-[120%] rotate-6 opacity-0' : 'translate-x-0 rotate-0 opacity-100 ease-out'
+          }`}
         >
-          <div className="w-full h-full bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col relative">
-
-            {/* LIKE / NOPE overlays */}
-            {showLikeOverlay && (
-              <div className="absolute top-8 left-6 z-30 border-4 border-green-500 rounded-xl px-4 py-2 rotate-[-20deg] animate-in zoom-in duration-150">
-                <span className="text-green-500 text-4xl font-black tracking-wider">LIKE</span>
-              </div>
-            )}
-            {showNopeOverlay && (
-              <div className="absolute top-8 right-6 z-30 border-4 border-red-500 rounded-xl px-4 py-2 rotate-[20deg] animate-in zoom-in duration-150">
-                <span className="text-red-500 text-4xl font-black tracking-wider">NOPE</span>
-              </div>
-            )}
-
-            {/* Foto Principal / Carrusel */}
-            <div className="w-full h-[55%] md:h-[60%] bg-gradient-to-br from-pink-400 via-rose-400 to-violet-500 relative flex items-center justify-center shrink-0">
-
-              {/* Instagram Story Progress Bars */}
+          {/* Main Card */}
+          <div className="w-full h-full bg-white rounded-[2.5rem] shadow-[0_24px_60px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col relative border-[0.5px] border-[#e1e3e4]">
+            
+            {/* HER0 IMAGE SECTION (65%) */}
+            <div className="w-full h-[65%] bg-[#f0f1f2] relative flex flex-col justify-end shrink-0">
+              
+              {/* Photo Navigation (Stories style) */}
               {photos.length > 1 && (
-                <div className="absolute top-3 left-0 right-0 gap-1.5 px-3 flex z-20">
+                <div className="absolute top-4 left-0 right-0 gap-1.5 px-4 flex z-30">
                   {photos.map((_, i) => (
-                    <div key={i} className={`h-1 flex-1 rounded-full shadow-sm transition-colors duration-300 ${i === currentPhotoIndex ? 'bg-white' : 'bg-white/40'}`} />
+                    <div key={i} className={`h-1 flex-1 rounded-full shadow-sm transition-colors duration-300 ${i === currentPhotoIndex ? 'bg-white' : 'bg-white/30 backdrop-blur-sm'}`} />
                   ))}
                 </div>
               )}
 
-              {/* Invisible Click Zones for Next/Prev Photo */}
+              {/* Click Zones */}
               {photos.length > 1 && (
                 <>
-                  <button onClick={() => setCurrentPhotoIndex(p => Math.max(0, p - 1))} className="absolute top-0 bottom-0 left-0 w-1/2 z-10 focus:outline-none" />
-                  <button onClick={() => setCurrentPhotoIndex(p => Math.min(photos.length - 1, p + 1))} className="absolute top-0 bottom-0 right-0 w-1/2 z-10 focus:outline-none" />
+                  <button onClick={() => setCurrentPhotoIndex(p => Math.max(0, p - 1))} className="absolute top-0 bottom-0 left-0 w-1/2 z-20 focus:outline-none" />
+                  <button onClick={() => setCurrentPhotoIndex(p => Math.min(photos.length - 1, p + 1))} className="absolute top-0 bottom-0 right-0 w-1/2 z-20 focus:outline-none" />
                 </>
               )}
 
               {/* Image Output */}
               {photos.length > 0 ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={photos[currentPhotoIndex]}
-                  alt={alumno.nombre}
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-              ) : null}
-              <span className={`text-white/40 text-[8rem] font-black tracking-tighter absolute inset-0 flex items-center justify-center ${photos.length > 0 ? 'z-[-1]' : ''}`}>
-                {alumno.nombre.charAt(0).toUpperCase()}
-              </span>
-
-              <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/20 to-transparent pointer-events-none"></div>
-
-              {/* Info Principal sobre la foto */}
-              <div className="absolute bottom-6 left-6 right-6 text-white text-left pointer-events-none">
-                <h2 className="text-4xl font-extrabold flex items-baseline gap-2 drop-shadow-lg leading-tight">
-                  {alumno.nombre} <span className="text-2xl font-normal opacity-90">{alumno.edad}</span>
+                <img src={photos[currentPhotoIndex]} alt={alumno.nombre} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#f3f4f5] to-[#e7e8e9]">
+                  <span className="text-[#c0c4ea] text-[8rem] font-black tracking-tighter">
+                    {alumno.nombre.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              
+              {/* Gradient overlay for text legibility (Ivy Pulse style) */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#191c1d]/90 via-[#191c1d]/20 to-transparent pointer-events-none z-10 mix-blend-multiply"></div>
+              
+              {/* Name and Basic Info Overlay */}
+              <div className="relative z-20 px-6 pb-6 text-white text-left pointer-events-none">
+                <h2 className="text-[32px] font-black flex items-baseline gap-2 leading-none drop-shadow-md">
+                  {alumno.nombre}, <span className="font-medium opacity-90">{alumno.edad}</span>
                 </h2>
-                <div className="flex items-center gap-1.5 mt-2 opacity-95 font-semibold text-sm drop-shadow-md">
-                   <span>💎</span>
-                   <span>{alumno.carrera}{alumno.semestre ? ` (${alumno.semestre}º)` : ''}</span>
+                <div className="flex items-center gap-1.5 mt-2 opacity-95 text-[14px] font-medium drop-shadow">
+                   <span className="text-[#ffb3b5]">●</span>
+                   <span>{alumno.carrera} • Semestre {alumno.semestre}</span>
                 </div>
               </div>
             </div>
 
-            {/* Detalles Interiores */}
-            <div className="p-6 flex-1 overflow-y-auto scrollbar-hide">
-              <div className="mb-6">
-                <h3 className="uppercase tracking-widest text-[10px] font-bold text-gray-400 mb-2 ml-1">Sobre mí</h3>
-                <p className="text-gray-700 text-[15px] leading-relaxed font-medium">
-                  {alumno.bio || "Este alumno prefiere mantener el misterio..."}
+            {/* INFO SECTION (35%) */}
+            <div className="p-6 flex-1 bg-white overflow-y-auto scrollbar-hide flex flex-col gap-6">
+              
+              {/* Bio Block */}
+              <div>
+                <h3 className="uppercase tracking-[0.15em] text-[10px] font-bold text-[#585d7e] mb-2 px-1">Sobre Mí</h3>
+                <p className="text-[#191c1d] text-[15px] leading-relaxed font-medium px-1">
+                  {alumno.bio || "Una persona de pocas palabras pero con mucho misterio. Desliza para descubrir más."}
                 </p>
               </div>
 
+              {/* Intereses Block */}
               {interesList.length > 0 && (
                 <div>
-                  <h3 className="uppercase tracking-widest text-[10px] font-bold text-gray-400 mb-3 ml-1">Intereses</h3>
+                  <h3 className="uppercase tracking-[0.15em] text-[10px] font-bold text-[#585d7e] mb-2 px-1">Intereses</h3>
                   <div className="flex flex-wrap gap-2">
-                    {interesList.slice(0, 5).map((interest) => (
-                      <span key={interest} className="px-3 py-1.5 bg-gray-100/80 text-gray-700 border border-gray-200/60 rounded-full text-xs font-bold">
+                    {interesList.slice(0, 6).map((interest) => (
+                      <span key={interest} className="px-4 py-1.5 bg-[#f3f4f5] text-[#191c1d] rounded-full text-[13px] font-medium">
                         {interest}
                       </span>
                     ))}
-                    {interesList.length > 5 && (
-                      <span className="px-3 py-1.5 bg-gray-50 text-gray-400 border border-transparent rounded-full text-xs font-bold">
-                        +{interesList.length - 5}
+                    {interesList.length > 6 && (
+                      <span className="px-4 py-1.5 text-[#585d7e] text-[13px] font-medium">
+                        +{interesList.length - 6} más
                       </span>
                     )}
                   </div>
                 </div>
               )}
             </div>
-
-            <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none rounded-b-[2rem]"></div>
+            
+            {/* Subtle Gradient Fade at the bottom */}
+            <div className="absolute bottom-0 w-full h-8 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
           </div>
         </div>
       </div>
 
-      {/* CONTROLES TINDER */}
-      <div className="w-full max-w-sm flex justify-center gap-8 mt-auto md:mt-6 shrink-0 z-30">
+      {/* SWIPE ACTION BUTTONS */}
+      <div className="w-full max-w-[420px] flex justify-center gap-6 mt-6 shrink-0 z-30 pointer-events-auto">
+        
+        {/* Pass Button */}
         <button
           onClick={() => handleSwipe('left')}
-          disabled={swiping}
-          className="group flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)] hover:bg-gray-50 transition-all active:scale-90 border border-gray-100 disabled:opacity-50"
+          className="group flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white shadow-[0_12px_24px_rgba(0,0,0,0.04)] hover:bg-[#f3f4f5] hover:-translate-y-1 transition-all duration-300 active:scale-95 border border-[#e1e3e4]"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-8 h-8 text-rose-500 group-hover:scale-110 transition-transform">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-8 h-8 text-[#585d7e] transition-colors group-hover:text-[#191c1d]">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
           </svg>
         </button>
 
+        {/* Super Like Button (Center, Smaller) */}
+        <button
+          className="group flex h-14 w-14 mt-2 items-center justify-center rounded-full bg-white shadow-[0_8px_16px_rgba(0,0,0,0.04)] hover:bg-[#f3f4f5] hover:-translate-y-1 transition-all duration-300 active:scale-95 border border-[#e1e3e4]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-[#920027]">
+            <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
+          </svg>
+        </button>
+
+        {/* Like Button */}
         <button
           onClick={() => handleSwipe('right')}
-          disabled={swiping}
-          className="group flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-rose-500 shadow-[0_10px_30px_rgba(244,63,94,0.3)] hover:shadow-pink-400/50 transition-all active:scale-90 disabled:opacity-50"
+          className="group flex h-[72px] w-[72px] items-center justify-center rounded-full bg-gradient-to-tr from-[#ba0034] to-[#e51245] shadow-[0_12px_24px_rgba(186,0,52,0.3)] hover:-translate-y-1 transition-all duration-300 active:scale-95"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 text-white group-hover:scale-110 transition-transform">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white">
             <path d="m11.645 20.91-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" />
           </svg>
         </button>
