@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { AppProvider } from "@/context/AppContext";
 import GoogleAuthProvider from "@/components/GoogleAuthProvider";
+import SessionGate from "@/components/SessionGate";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,8 +33,10 @@ export default function RootLayout({
       >
         <GoogleAuthProvider>
           <AppProvider>
-            {children}
-            <Navbar />
+            <SessionGate>
+              {children}
+              <Navbar />
+            </SessionGate>
           </AppProvider>
         </GoogleAuthProvider>
       </body>

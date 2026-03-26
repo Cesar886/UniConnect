@@ -23,6 +23,7 @@ interface UserProfile {
 interface AppContextType {
   // Auth
   isLoggedIn: boolean
+  sessionLoading: boolean
   login: (matricula?: number) => Promise<void>
   logout: () => Promise<void>
 
@@ -35,6 +36,7 @@ const AppContext = createContext<AppContextType | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [sessionLoading, setSessionLoading] = useState(true)
   const [userProfile, setUserProfile] = useState<UserProfile>({
     matricula: null,
     name: 'Cargando...',
@@ -54,7 +56,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     getCurrentSession().then((session: any) => {
       const matNum = session?.matricula
-      if (!matNum) return
+      if (!matNum) {
+        setSessionLoading(false)
+        return
+      }
       setIsLoggedIn(true)
       getProfile(matNum).then((data: any) => {
         if (data) {
@@ -74,6 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } else {
           setUserProfile(prev => ({ ...prev, matricula: matNum }))
         }
+        setSessionLoading(false)
       })
     })
   }, [])
@@ -131,6 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         isLoggedIn,
+        sessionLoading,
         login,
         logout,
         userProfile,

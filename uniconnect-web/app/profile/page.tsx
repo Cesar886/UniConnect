@@ -36,9 +36,11 @@ const INTERESES_CATEGORIAS = [
 export default function ProfilePage() {
   const { userProfile, updateProfile, logout } = useApp()
   const router = useRouter()
-  
+
   // Estado para controlar el modo de vista (Visualización vs Edición)
   const [isEditing, setIsEditing] = useState(false)
+  const [photoIndex, setPhotoIndex] = useState(0)
+  const carouselTouchStart = useRef(0)
   const [saved, setSaved] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -178,47 +180,90 @@ export default function ProfilePage() {
             {/* Tarjeta Principal */}
             <div className="bg-white rounded-[2rem] overflow-hidden shadow-2xl shadow-gray-200/50 mb-6 border border-gray-100 relative">
               
-              {/* Foto de Perfil */}
-              <div className="w-full aspect-[4/5] bg-gradient-to-br from-pink-400 via-rose-400 to-violet-500 relative flex items-center justify-center overflow-hidden">
-                {userProfile.photo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={safePhotoUrl(userProfile.photo)} alt="Mi Perfil" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-white/40 text-9xl font-black tracking-tighter">
-                    {name.charAt(0).toUpperCase()}
-                  </span>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/20 to-transparent pointer-events-none"></div>
-                
-                {/* File Upload Button Over Photo */}
-                <button 
-                  onClick={() => triggerUpload(1)}
-                  disabled={isUploading}
-                  className="absolute bottom-28 right-6 bg-white/20 backdrop-blur-md border border-white/50 text-white rounded-full p-3.5 shadow-xl hover:bg-white/30 transition-all z-10 hover:scale-105 active:scale-95"
-                >
-                  {isUploading ? (
-                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                    </svg>
-                  )}
-                </button>
+              {/* Carrusel de Fotos */}
+              {(() => {
+                const allPhotos = (userProfile.photos || []).filter(Boolean)
+                const visiblePhotos = allPhotos.length > 0 ? allPhotos : ['']
+                const clampedIndex = Math.min(photoIndex, visiblePhotos.length - 1)
+                return (
+                  <div
+                    className="w-full aspect-[4/5] bg-gradient-to-br from-pink-400 via-rose-400 to-violet-500 relative flex items-center justify-center overflow-hidden select-none"
+                    onTouchStart={(e) => { carouselTouchStart.current = e.touches[0].clientX }}
+                    onTouchEnd={(e) => {
+                      const delta = e.changedTouches[0].clientX - carouselTouchStart.current
+                      if (delta < -50 && clampedIndex < visiblePhotos.length - 1) setPhotoIndex(clampedIndex + 1)
+                      if (delta > 50 && clampedIndex > 0) setPhotoIndex(clampedIndex - 1)
+                    }}
+                  >
+                    {visiblePhotos[clampedIndex] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={safePhotoUrl(visiblePhotos[clampedIndex])} alt="Mi Perfil" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white/40 text-9xl font-black tracking-tighter">
+                        {name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/20 to-transparent pointer-events-none"></div>
 
-                {/* Nombre y Edad sobre la foto */}
-                <div className="absolute bottom-6 left-6 right-6 text-white text-left pointer-events-none">
-                  <h2 className="text-4xl font-extrabold flex items-baseline gap-2 drop-shadow-lg">
-                    {name} <span className="text-2xl font-normal opacity-90">{age}</span>
-                  </h2>
-                  <div className="flex items-center gap-2 mt-2 opacity-90 font-medium">
-                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
-                     </svg>
-                     <span>{career} ({semester}º Semestre)</span>
+                    {/* Indicadores de foto (dots) */}
+                    {visiblePhotos.length > 1 && (
+                      <div className="absolute top-3 left-0 right-0 flex justify-center gap-1.5 px-4 pointer-events-none">
+                        {visiblePhotos.map((_, i) => (
+                          <div
+                            key={i}
+                            className={`h-1 rounded-full transition-all duration-300 ${i === clampedIndex ? 'bg-white w-6' : 'bg-white/50 w-3'}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Zonas de tap para navegar */}
+                    {clampedIndex > 0 && (
+                      <button
+                        onClick={() => setPhotoIndex(clampedIndex - 1)}
+                        className="absolute left-0 top-0 bottom-0 w-1/3 z-10"
+                        aria-label="Foto anterior"
+                      />
+                    )}
+                    {clampedIndex < visiblePhotos.length - 1 && (
+                      <button
+                        onClick={() => setPhotoIndex(clampedIndex + 1)}
+                        className="absolute right-0 top-0 bottom-0 w-1/3 z-10"
+                        aria-label="Foto siguiente"
+                      />
+                    )}
+
+                    {/* Botón de cámara */}
+                    <button
+                      onClick={() => triggerUpload((clampedIndex + 1) as 1 | 2 | 3)}
+                      disabled={isUploading}
+                      className="absolute bottom-28 right-6 bg-white/20 backdrop-blur-md border border-white/50 text-white rounded-full p-3.5 shadow-xl hover:bg-white/30 transition-all z-20 hover:scale-105 active:scale-95"
+                    >
+                      {isUploading ? (
+                        <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                        </svg>
+                      )}
+                    </button>
+
+                    {/* Nombre y Edad sobre la foto */}
+                    <div className="absolute bottom-6 left-6 right-6 text-white text-left pointer-events-none z-10">
+                      <h2 className="text-4xl font-extrabold flex items-baseline gap-2 drop-shadow-lg">
+                        {name} <span className="text-2xl font-normal opacity-90">{age}</span>
+                      </h2>
+                      <div className="flex items-center gap-2 mt-2 opacity-90 font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
+                        </svg>
+                        <span>{career} ({semester}º Semestre)</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                )
+              })()}
 
               {/* Contenido (Bio y Gustos) */}
               <div className="p-6">
