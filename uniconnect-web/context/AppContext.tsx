@@ -52,37 +52,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
-    // Basic client-side hidration
-    if (typeof window !== 'undefined') {
-      const savedMatricula = localStorage.getItem('uniconnect_session_id')
-      if (savedMatricula) {
-        setIsLoggedIn(true)
-        const matNum = parseInt(savedMatricula, 10)
-        
-        getProfile(matNum).then((data: any) => {
-          if (data) {
-             setUserProfile(prev => ({
-               ...prev,
-               matricula: matNum,
-               name: data.nombre,
-               age: data.edad || 18,
-               career: data.carrera || '',
-               semester: data.semestre || 1,
-               bio: data.bio || '',
-               interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
-               photo: data.foto_perfil || '',
-               photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
-               is_admin: data.is_admin || false,
-               pref_edad_min: data.pref_edad_min || 18,
-               pref_edad_max: data.pref_edad_max || 99,
-               genero_interes: data.genero_interes || 'Ambos',
-             }))
-          } else {
-             setUserProfile(prev => ({...prev, matricula: matNum}))
-          }
-        })
-      }
-    }
+    getCurrentSession().then((session: any) => {
+      const matNum = session?.matricula
+      if (!matNum) return
+      setIsLoggedIn(true)
+      getProfile(matNum).then((data: any) => {
+        if (data) {
+          setUserProfile(prev => ({
+            ...prev,
+            matricula: matNum,
+            name: data.nombre,
+            age: data.edad || 18,
+            career: data.carrera || '',
+            semester: data.semestre || 1,
+            bio: data.bio || '',
+            interests: data.intereses ? data.intereses.split(',').map((s:string) => s.trim()) : [],
+            photo: data.foto_perfil || '',
+            photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
+            is_admin: data.is_admin || false,
+          }))
+        } else {
+          setUserProfile(prev => ({ ...prev, matricula: matNum }))
+        }
+      })
+    })
   }, [])
 
   const login = async (matricula?: number) => {
