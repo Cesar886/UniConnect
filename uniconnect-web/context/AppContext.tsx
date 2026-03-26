@@ -15,6 +15,9 @@ interface UserProfile {
   photo: string
   photos: string[]
   is_admin?: boolean
+  pref_edad_min?: number
+  pref_edad_max?: number
+  genero_interes?: string
 }
 
 interface AppContextType {
@@ -43,6 +46,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     photo: '',
     photos: ['', '', ''],
     is_admin: false,
+    pref_edad_min: 18,
+    pref_edad_max: 99,
+    genero_interes: 'Ambos',
   })
 
   useEffect(() => {
@@ -91,6 +97,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
            photo: data.foto_perfil || '',
            photos: [data.foto_perfil || '', data.foto2 || '', data.foto3 || ''],
            is_admin: data.is_admin || false,
+           pref_edad_min: data.pref_edad_min || 18,
+           pref_edad_max: data.pref_edad_max || 99,
+           genero_interes: data.genero_interes || 'Ambos',
          }))
       } else {
         setUserProfile(prev => ({ ...prev, matricula }))

@@ -126,20 +126,22 @@ export async function registerFromPadron(formData: FormData) {
   }
 
   try {
+    const isMenor = (parseInt(edad, 10) || 0) < 18;
+
     const query = `
       INSERT INTO alumnos (
         matricula, email, password_hash, nombre, apellidos,
         genero, edad, carrera, semestre, genero_interes,
-        bio, intereses
+        bio, intereses, es_menor
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
       ) RETURNING matricula
     `;
 
     const values = [
       parseInt(matricula, 10), email, password, nombre, apellidos,
       genero, parseInt(edad, 10) || null, carrera, parseInt(semestre, 10) || null, genero_interes,
-      bio, intereses
+      bio, intereses, isMenor
     ];
 
     const result = await pool.query(query, values);
@@ -248,20 +250,22 @@ export async function registerUser(formData: FormData) {
       return { success: false, error: 'Edad no válida o fuera de rango.' };
     }
 
+    const isMenor = edad < 18;
+
     const query = `
       INSERT INTO alumnos (
         matricula, email, password_hash, nombre, apellidos,
         carrera, semestre, genero, genero_interes,
-        fecha_nac, edad, bio, intereses
+        fecha_nac, edad, bio, intereses, es_menor
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
       ) RETURNING matricula
     `;
 
     const values = [
       matricula, email, password, nombre, apellidos,
       carrera, semestre, genero, genero_interes,
-      fecha_nac, edad, bio, intereses
+      fecha_nac, edad, bio, intereses, isMenor
     ];
 
     const result = await pool.query(query, values);

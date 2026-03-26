@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { getStudents } from '@/app/actions/students'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { getStudents, updatePreferences } from '@/app/actions/students'
 import { swipeUser } from '@/app/actions/match'
 import { useApp } from '@/context/AppContext'
 import { useRouter } from 'next/navigation'
@@ -24,7 +24,7 @@ export interface Alumno {
 }
 
 export default function Home() {
-  const { userProfile } = useApp()
+  const { userProfile, updateProfile } = useApp()
   const myMatricula = userProfile.matricula
   const router = useRouter()
 
@@ -36,6 +36,9 @@ export default function Home() {
   const [swiping, setSwiping] = useState(false)
   const [likes, setLikes] = useState<number[]>([])
   const [matchData, setMatchData] = useState<Alumno | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [prefAge, setPrefAge] = useState({ min: 18, max: 99 })
+  const [prefGender, setPrefGender] = useState('Ambos')
 
   // Touch swipe
   const touchStartX = useRef(0)
@@ -57,7 +60,11 @@ export default function Home() {
     if (myMatricula) {
       fetchAlumnosFromDB()
     }
-  }, [fetchAlumnosFromDB, myMatricula])
+    if (userProfile.pref_edad_min) {
+      setPrefAge({ min: userProfile.pref_edad_min, max: userProfile.pref_edad_max || 99 })
+      setPrefGender(userProfile.genero_interes || 'Ambos')
+    }
+  }, [fetchAlumnosFromDB, myMatricula, userProfile])
 
   const advanceCard = useCallback(() => {
     setDirection(null)
@@ -275,12 +282,93 @@ export default function Home() {
           <span className="text-[9px] font-bold tracking-[0.2em] text-[#916e6f] uppercase mt-1">The Pulse</span>
         </div>
 
-        <button className="w-10 h-10 rounded-full bg-white border border-[#e1e3e4] shadow-sm flex items-center justify-center text-[#585d7e] focus:outline-none">
+        <button 
+          onClick={() => setShowSettings(true)}
+          className="w-10 h-10 rounded-full bg-white border border-[#e1e3e4] shadow-sm flex items-center justify-center text-[#585d7e] focus:outline-none hover:bg-gray-50 transition-colors"
+        >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
           </svg>
         </button>
       </div>
+
+      {/* MODAL DE PREFERENCIAS */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-6 transition-all animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 pb-12 shadow-2xl animate-in slide-in-from-bottom-10 duration-500">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-[#191c1d] tracking-tight">Preferencias</h2>
+              <button onClick={() => setShowSettings(false)} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-10">
+              {/* RANGO DE EDAD */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <label className="text-sm font-bold text-gray-400 uppercase tracking-widest leading-none">Rango de Edad</label>
+                  <span className="text-lg font-black text-[#ba0034] tracking-tight">{prefAge.min} - {prefAge.max}</span>
+                </div>
+                <div className="px-2">
+                  <input 
+                    type="range" 
+                    min="18" 
+                    max="99" 
+                    value={prefAge.max} 
+                    onChange={(e) => setPrefAge(prev => ({ ...prev, max: parseInt(e.target.value) }))}
+                    className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer range-pink focus:outline-none"
+                    style={{
+                      accentColor: '#ba0034'
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-3 font-medium px-1">Se te mostrarán alumnos entre estas edades.</p>
+              </div>
+
+              {/* GÉNERO DE INTERÉS */}
+              <div>
+                <label className="block text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 px-1">Interés en</label>
+                <div className="flex gap-2 p-1 bg-gray-50 rounded-[1.2rem]">
+                  {['Hombres', 'Mujeres', 'Ambos'].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setPrefGender(g)}
+                      className={`flex-1 py-3.5 rounded-[1rem] text-sm font-bold transition-all ${prefGender === g ? 'bg-white text-[#ba0034] shadow-sm ring-1 ring-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button 
+                onClick={async () => {
+                  if (myMatricula) {
+                    await updatePreferences(myMatricula, {
+                      pref_edad_min: prefAge.min,
+                      pref_edad_max: prefAge.max,
+                      genero_interes: prefGender
+                    });
+                    updateProfile({ 
+                      pref_edad_min: prefAge.min, 
+                      pref_edad_max: prefAge.max, 
+                      genero_interes: prefGender 
+                    });
+                    fetchAlumnosFromDB();
+                    setShowSettings(false);
+                  }
+                }}
+                className="w-full py-4.5 rounded-2xl bg-gray-900 text-white font-bold text-[15px] hover:bg-black transition-all active:scale-[0.98] shadow-lg shadow-gray-200"
+              >
+                Guardar y Actualizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SWIPE CARD CONTAINER (Ivy Pulse Style) */}
       <div className="relative w-full max-w-[420px] max-h-[750px] flex-1 flex items-center justify-center pointer-events-none z-20">
