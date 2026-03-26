@@ -122,6 +122,18 @@ export async function toggleAdminStatus(adminId: number, targetId: number, statu
   }
 }
 
+export async function toggleMinorStatus(adminId: number, targetId: number, status: boolean) {
+  try {
+    const check = await pool.query('SELECT is_admin FROM alumnos WHERE matricula = $1', [adminId]);
+    if (check.rows.length === 0 || !check.rows[0].is_admin) throw new Error('No autorizado');
+
+    await pool.query('UPDATE alumnos SET es_menor = $1 WHERE matricula = $2', [status, targetId]);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+}
+
 export async function updatePreferences(matricula: number, prefs: { pref_edad_min?: number, pref_edad_max?: number, genero_interes?: string }) {
   try {
     const { pref_edad_min, pref_edad_max, genero_interes } = prefs;
@@ -136,6 +148,46 @@ export async function updatePreferences(matricula: number, prefs: { pref_edad_mi
     return { success: true };
   } catch (err) {
     console.error('Error updating preferences:', err);
+    return { success: false, error: String(err) };
+  }
+}
+
+export async function resetUserFeed(matricula: number) {
+  try {
+    // Borrar swipes del usuario que NO son matches mutuos
+    await pool.query(`
+      DELETE FROM swipes 
+      WHERE swiper_id = $1 
+      AND swiped_id NOT IN (
+        SELECT swiper_id FROM swipes 
+        WHERE swiped_id = $1 AND liked = true
+      )
+    `, [matricula]);
+    return { success: true };
+  } catch (err) {
+    console.error('Error resetting user feed:', err);
+    return { success: false, error: String(err) };
+  }
+}
+
+export async function resetAllFeeds(adminId: number) {
+  try {
+    const check = await pool.query('SELECT is_admin FROM alumnos WHERE matricula = $1', [adminId]);
+    if (check.rows.length === 0 || !check.rows[0].is_admin) throw new Error('No autorizado');
+
+    // Borrar TODOS los swipes que no son matches mutuos
+    await pool.query(`
+      DELETE FROM swipes 
+      WHERE (swiper_id, swiped_id) NOT IN (
+        SELECT s1.swiper_id, s1.swiped_id 
+        FROM swipes s1 
+        JOIN swipes s2 ON s1.swiper_id = s2.swiped_id AND s1.swiped_id = s2.swiper_id 
+        WHERE s1.liked = true AND s2.liked = true
+      )
+    `);
+    return { success: true };
+  } catch (err) {
+    console.error('Error resetting all feeds:', err);
     return { success: false, error: String(err) };
   }
 }
