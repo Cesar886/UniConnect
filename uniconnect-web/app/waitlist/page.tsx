@@ -1,15 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getWaitlistStats, joinWaitlist } from '@/app/actions/waitlist'
+import { getWaitlistStats } from '@/app/actions/waitlist'
 
 export default function WaitlistPage() {
   const [count, setCount] = useState(47)
   const goal = 200
-  const [email, setEmail] = useState('')
-  const [isSuccess, setIsSuccess] = useState(false)
-  const [isError, setIsError] = useState(false)
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     async function loadStats() {
@@ -24,27 +20,6 @@ export default function WaitlistPage() {
   const updateProgress = (n: number) => {
     const pct = Math.min((n / goal) * 100, 100)
     return pct.toFixed(1) + '%'
-  }
-
-  async function handleRegister() {
-    if (!email || !email.includes('@')) {
-      setIsError(true)
-      setTimeout(() => setIsError(false), 2000)
-      return
-    }
-
-    setLoading(true)
-    const res = await joinWaitlist(email)
-    setLoading(false)
-
-    if (res.success) {
-      setCount(prev => prev + 1)
-      setIsSuccess(true)
-      setEmail('')
-    } else {
-      setIsError(true)
-      setTimeout(() => setIsError(false), 2000)
-    }
   }
 
   return (
@@ -321,56 +296,24 @@ export default function WaitlistPage() {
           animation: fadein 1.3s ease both 0.5s;
         }
 
-        .um-input {
-          flex: 1;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid ${isError ? 'rgba(229,18,69,0.6)' : 'rgba(255,255,255,0.1)'};
-          border-radius: 12px;
-          padding: 14px 16px;
-          color: #ededed;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 14px;
-          outline: none;
-          transition: border-color 0.2s;
-          min-width: 0;
-        }
-
-        .um-input::placeholder { color: rgba(237,237,237,0.25); }
-        .um-input:focus { border-color: rgba(186,0,52,0.5); }
-
         .um-btn {
           background: linear-gradient(135deg, #ba0034, #e51245);
           border: none;
           border-radius: 12px;
-          padding: 14px 22px;
+          padding: 14px 42px;
           color: #fff;
           font-family: 'Syne', sans-serif;
           font-weight: 700;
-          font-size: 14px;
+          font-size: 16px;
           cursor: pointer;
           white-space: nowrap;
           transition: opacity 0.2s, transform 0.15s;
           letter-spacing: 0.02em;
+          text-decoration: none;
         }
 
         .um-btn:hover { opacity: 0.88; transform: translateY(-1px); }
         .um-btn:active { transform: scale(0.97); }
-
-        .um-success {
-          display: ${isSuccess ? 'flex' : 'none'};
-          align-items: center;
-          gap: 8px;
-          background: rgba(186,0,52,0.12);
-          border: 1px solid rgba(186,0,52,0.25);
-          border-radius: 10px;
-          padding: 12px 18px;
-          font-size: 13px;
-          color: #ff8ca8;
-          width: 100%;
-          max-width: 360px;
-          margin-bottom: 16px;
-          animation: fadein 0.5s ease both;
-        }
 
         .um-features {
           display: flex;
@@ -457,25 +400,10 @@ export default function WaitlistPage() {
           <div className="um-reveal-sub">todos los perfiles son anónimos hasta entonces</div>
         </div>
 
-        {!isSuccess && (
-          <div className="um-input-row">
-            <input
-              className="um-input"
-              type="email"
-              placeholder="tu correo estudiantil"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
-              disabled={loading}
-            />
-            <button className="um-btn" onClick={handleRegister} disabled={loading}>
-              {loading ? '...' : 'unirse'}
-            </button>
-          </div>
-        )}
-
-        <div className="um-success">
-          <span>✦</span> ¡ya eres parte! te avisamos cuando se revelen los perfiles.
+        <div className="um-input-row" style={{ justifyContent: 'center' }}>
+          <a href="/register" className="um-btn">
+            ir al registro
+          </a>
         </div>
 
         <div className="um-features">

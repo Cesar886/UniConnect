@@ -20,6 +20,7 @@ function NavbarContent() {
      pathname === '/login' ||
      pathname === '/register' ||
      pathname === '/auth' ||
+     pathname === '/waitlist' ||
      (pathname === '/chat' && searchParams.get('id'))
   ) {
     return null
