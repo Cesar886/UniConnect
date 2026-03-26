@@ -455,7 +455,7 @@ export default function RegisterResponsivePage() {
 
         <div className="relative z-10 translate-y-[-10%]">
           <h2 className="text-6xl font-bold text-white mb-6 leading-[1.15]">No estudies<br/>solo nunca más.</h2>
-          <p className="text-2xl text-white/90 max-w-lg font-light leading-relaxed">Únete a la exclusiva red de alumnos de la UM. Conoce amigos, encuentra pareja para proyectos y haz el match perfecto.</p>
+          <p className="text-2xl text-white/90 max-w-lg font-light leading-relaxed">Únete a la exclusiva red de alumnos de la UM. Encuentra amigos, compañeros de estudio y haz la conexión perfecta.</p>
         </div>
 
         <div className="relative z-10 text-white/60 font-medium tracking-wide text-sm flex gap-6">
@@ -581,7 +581,7 @@ export default function RegisterResponsivePage() {
             {/* ======================== PASO 3: UNI (SOLO NUEVOS) ======================== */}
             {step === 3 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">Hola, {formData.nombre.split(' ')[0] || 'futuro match'}</h1>
+                <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">Hola, {formData.nombre.split(' ')[0] || 'compañero'}</h1>
                 <p className="text-gray-500 text-lg lg:text-xl mb-10">Detalles de tu vida como universitario.</p>
 
                 <div className="space-y-6">

@@ -14,3 +14,13 @@ export function safePhotoUrl(url: string | null | undefined): string {
   }
   return ''
 }
+
+/**
+ * Basic string sanitizer to remove HTML tags and trim whitespace.
+ */
+export function sanitizeString(str: string | null | undefined): string {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .replace(/<[^>]*>?/gm, '') // Remove HTML tags
+    .trim()
+}

@@ -5,6 +5,8 @@ import { createSession, deleteSession, getSession } from '@/lib/session'
 import { OAuth2Client } from 'google-auth-library'
 import { headers } from 'next/headers'
 import { checkRateLimit } from '@/lib/ratelimit'
+import bcrypt from 'bcryptjs'
+import { registerSchema, loginSchema } from '@/lib/schemas'
 
 // Obtiene la IP del cliente desde los headers de la petición
 async function getClientIp(): Promise<string> {
@@ -105,28 +107,24 @@ export async function registerFromPadron(formData: FormData) {
     return { success: false, error: `Demasiados registros desde tu red. Intenta en ${formatRetry(rl.retryAfterMs)}.` }
   }
 
-  const matricula = formData.get('matricula') as string;
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
-  const nombre = formData.get('nombre') as string;
-  const apellidos = formData.get('apellidos') as string;
-  const genero = formData.get('genero') as string;
-  const edad = formData.get('edad') as string;
-  const carrera = formData.get('carrera') as string;
-  const semestre = formData.get('semestre') as string;
-  const genero_interes = formData.get('genero_interes') as string;
-  const bio = formData.get('bio') as string;
-  const intereses = formData.get('intereses') as string;
-
-  if (!matricula || !/^\d{7}$/.test(matricula)) {
-    return { success: false, error: 'Matrícula inválida.' };
-  }
-  if (!password || password.length < 6) {
-    return { success: false, error: 'Contraseña mínimo 6 caracteres.' };
-  }
-
   try {
-    const isMenor = (parseInt(edad, 10) || 0) < 18;
+
+    // Validar con Zod
+    const rawData = Object.fromEntries(formData.entries());
+    const validated = registerSchema.safeParse({
+      ...rawData,
+      matricula: rawData.matricula as string,
+      edad: parseInt(rawData.edad as string, 10),
+      semestre: parseInt(rawData.semestre as string, 10),
+    });
+
+    if (!validated.success) {
+      return { success: false, error: validated.error.issues[0].message };
+    }
+
+    const { matricula, email, password, nombre, apellidos, genero, edad, carrera, semestre, genero_interes, bio, intereses } = validated.data;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const isMenor = (edad || 0) < 18;
 
     const query = `
       INSERT INTO alumnos (
@@ -139,9 +137,9 @@ export async function registerFromPadron(formData: FormData) {
     `;
 
     const values = [
-      parseInt(matricula, 10), email, password, nombre, apellidos,
-      genero, parseInt(edad, 10) || null, carrera, parseInt(semestre, 10) || null, genero_interes,
-      bio, intereses, isMenor
+      parseInt(matricula, 10), email, hashedPassword, nombre, apellidos,
+      genero || null, edad || null, carrera || null, semestre || null, genero_interes || null,
+      bio || null, intereses || null, isMenor
     ];
 
     const result = await pool.query(query, values);
@@ -187,10 +185,11 @@ export async function registerExistingUser(formData: FormData) {
       return { success: false, error: 'No es posible completar el registro con estos datos.' };
     }
 
+    const hashedPassword = await bcrypt.hash(password, 10);
     const newMatricula = parseInt(matricula, 10);
     await pool.query(
       `UPDATE alumnos SET email = $1, password_hash = $2, genero_interes = COALESCE($3, genero_interes) WHERE matricula = $4`,
-      [email, password, genero_interes || null, newMatricula]
+      [email, hashedPassword, genero_interes || null, newMatricula]
     );
 
     await createSession(newMatricula);
@@ -252,6 +251,8 @@ export async function registerUser(formData: FormData) {
 
     const isMenor = edad < 18;
 
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const query = `
       INSERT INTO alumnos (
         matricula, email, password_hash, nombre, apellidos,
@@ -263,7 +264,7 @@ export async function registerUser(formData: FormData) {
     `;
 
     const values = [
-      matricula, email, password, nombre, apellidos,
+      matricula, email, hashedPassword, nombre, apellidos,
       carrera, semestre, genero, genero_interes,
       fecha_nac, edad, bio, intereses, isMenor
     ];
@@ -352,12 +353,12 @@ export async function loginUser(formData: FormData) {
     const cleanId = identificador.trim();
 
     if (/^\d{7}$/.test(cleanId)) {
-      query = `SELECT matricula, nombre, foto_perfil FROM alumnos WHERE matricula = $1 AND password_hash = $2`;
-      values = [parseInt(cleanId, 10), password];
+      query = `SELECT matricula, nombre, foto_perfil, password_hash FROM alumnos WHERE matricula = $1`;
+      values = [parseInt(cleanId, 10)];
     }
     else if (cleanId.includes('@')) {
-      query = `SELECT matricula, nombre, foto_perfil FROM alumnos WHERE LOWER(email) = LOWER($1) AND password_hash = $2`;
-      values = [cleanId.toLowerCase(), password];
+      query = `SELECT matricula, nombre, foto_perfil, password_hash FROM alumnos WHERE LOWER(email) = LOWER($1)`;
+      values = [cleanId.toLowerCase()];
     }
     else {
       return { success: false, error: 'Debes escribir tu matrícula (7 números) o tu correo institucional completo.' };
@@ -369,7 +370,14 @@ export async function loginUser(formData: FormData) {
       return { success: false, error: 'Datos incorrectos. Verifica tu contraseña o identificador.' };
     }
 
-    const { matricula, nombre, foto_perfil } = result.rows[0];
+    const { matricula, nombre, foto_perfil, password_hash } = result.rows[0];
+
+    // Verificar contraseña con bcrypt
+    const isPasswordCorrect = await bcrypt.compare(password, password_hash);
+    if (!isPasswordCorrect) {
+      return { success: false, error: 'Datos incorrectos. Verifica tu contraseña o identificador.' };
+    }
+
     await createSession(matricula)
     return { success: true, user: { matricula, nombre, foto_perfil } };
 

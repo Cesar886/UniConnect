@@ -193,10 +193,10 @@ export default function Home() {
 
         <div className="relative z-10 flex flex-col items-center px-6 text-center w-full max-w-lg">
           <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-2 animate-in slide-in-from-bottom-5 duration-700">
-            ES UN <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#e51245] to-[#ffb3b5]">MATCH.</span>
+            NUEVA <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#e51245] to-[#ffb3b5]">CONEXIÓN.</span>
           </h1>
           <p className="text-lg text-gray-300 font-medium mb-16 animate-in fade-in duration-1000 delay-300">
-            Tú y {matchData.nombre} se atraen mutuamente.
+            Tú y {matchData.nombre} ahora pueden conversar y conocerse.
           </p>
 
           <div className="flex items-center justify-center mb-16 relative w-full h-40">
@@ -287,7 +287,7 @@ export default function Home() {
               <div className="space-y-10">
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest leading-none">Rango de Edad</label>
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest leading-none">Rango de Edad Sugerido</label>
                     <span className="text-lg font-black text-[#ba0034] tracking-tight">{prefAge.min} - {prefAge.max}</span>
                   </div>
                   <div className="px-2">
@@ -304,7 +304,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 px-1">Interés en</label>
+                  <label className="block text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 px-1">Mostrar perfiles de</label>
                   <div className="flex gap-2 p-1 bg-gray-50 rounded-[1.2rem]">
                     {['Hombres', 'Mujeres', 'Ambos'].map((g) => (
                       <button
@@ -583,7 +583,7 @@ export default function Home() {
               
               {/* Bio Block */}
               <div>
-                <h3 className="uppercase tracking-[0.15em] text-[10px] font-bold text-[#585d7e] mb-2 px-1">Sobre Mí</h3>
+                <h3 className="uppercase tracking-[0.15em] text-[10px] font-bold text-[#585d7e] mb-2 px-1">Presentación</h3>
                 <p className="text-[#191c1d] text-[15px] leading-relaxed font-medium px-1">
                   {alumno.bio || "Una persona de pocas palabras pero con mucho misterio. Desliza para descubrir más."}
                 </p>

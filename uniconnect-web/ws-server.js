@@ -3,8 +3,14 @@ const { Server } = require('socket.io')
 const { Pool } = require('pg')
 const { jwtVerify } = require('jose')
 
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('[WS] Error: DATABASE_URL no está definida.');
+  process.exit(1);
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://uniconnect:987654321@64.23.168.72:5432/tinder'
+  connectionString
 })
 
 // ─── Schema migration ───────────────────────────────────────────────
