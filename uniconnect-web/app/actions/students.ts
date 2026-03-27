@@ -134,6 +134,28 @@ export async function toggleMinorStatus(adminId: number, targetId: number, statu
   }
 }
 
+export async function saveProfileData(data: {
+  nombre: string
+  edad: number
+  carrera: string
+  semestre: number
+  bio: string
+  intereses: string
+}) {
+  try {
+    const session = await getSession()
+    if (!session) return { success: false, error: 'No autenticado' }
+    await pool.query(
+      `UPDATE alumnos SET nombre = $1, edad = $2, carrera = $3, semestre = $4, bio = $5, intereses = $6 WHERE matricula = $7`,
+      [data.nombre, data.edad, data.carrera, data.semestre, data.bio, data.intereses, session.matricula]
+    )
+    return { success: true }
+  } catch (err) {
+    console.error('Error saving profile:', err)
+    return { success: false, error: String(err) }
+  }
+}
+
 export async function updatePreferences(matricula: number, prefs: { pref_edad_min?: number, pref_edad_max?: number, genero_interes?: string }) {
   try {
     const { pref_edad_min, pref_edad_max, genero_interes } = prefs;

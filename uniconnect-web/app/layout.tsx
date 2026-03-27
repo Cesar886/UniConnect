@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tinder UM",
+  title: "Umatch",
   description: "Conecta con alumnos de la Universidad de la Montaña",
 };
 

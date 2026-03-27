@@ -5,6 +5,29 @@ import { join } from 'path'
 import pool from '@/lib/db'
 import { getSession } from '@/lib/session'
 
+const origFileName = (matricula: number, slot: number) => `${matricula}-slot${slot}-orig.webp`
+
+// Guarda el archivo original sin tocar la DB (para poder re-editar sin perder calidad)
+export async function saveOriginalPhoto(slot: 1 | 2 | 3, formData: FormData) {
+  try {
+    const session = await getSession()
+    if (!session) return { success: false }
+    const matricula = session.matricula
+
+    const file = formData.get('file') as File
+    if (!file) return { success: false }
+
+    const uploadDir = join(process.cwd(), 'public', 'uploads')
+    await mkdir(uploadDir, { recursive: true }).catch(() => {})
+
+    const bytes = await file.arrayBuffer()
+    await writeFile(join(uploadDir, origFileName(matricula, slot)), Buffer.from(bytes))
+    return { success: true, origUrl: `/uploads/${origFileName(matricula, slot)}` }
+  } catch {
+    return { success: false }
+  }
+}
+
 export async function uploadProfilePhoto(slot: 1 | 2 | 3, formData: FormData) {
   try {
     const session = await getSession()
@@ -26,11 +49,7 @@ export async function uploadProfilePhoto(slot: 1 | 2 | 3, formData: FormData) {
     const buffer = Buffer.from(bytes)
 
     const uploadDir = join(process.cwd(), 'public', 'uploads')
-    try {
-      await mkdir(uploadDir, { recursive: true })
-    } catch (e) {
-      // Ignorar si ya existe
-    }
+    await mkdir(uploadDir, { recursive: true }).catch(() => {})
 
     const MIME_TO_EXT: Record<string, string> = {
       'image/jpeg': 'jpg',
@@ -44,29 +63,23 @@ export async function uploadProfilePhoto(slot: 1 | 2 | 3, formData: FormData) {
 
     const columnName = slot === 1 ? 'foto_perfil' : slot === 2 ? 'foto2' : 'foto3'
 
-    // 1. Buscar si el usuario ya tenía una foto local antes de guardar la nueva
+    // Borrar foto anterior (pero NO el original _orig)
     const currentRes = await pool.query(`SELECT ${columnName} FROM alumnos WHERE matricula = $1`, [matricula])
     if (currentRes.rows.length > 0) {
       const oldUrl = currentRes.rows[0][columnName]
       if (oldUrl && oldUrl.startsWith('/uploads/')) {
         const oldFileName = oldUrl.replace('/uploads/', '')
-        const oldPath = join(uploadDir, oldFileName)
-        try {
-          await unlink(oldPath) // Eliminar archivo físico
-        } catch (e) {
-          console.log(`No se pudo borrar la foto vieja: ${oldPath}`)
+        if (!oldFileName.includes('-orig.')) {
+          try { await unlink(join(uploadDir, oldFileName)) } catch {}
         }
       }
     }
 
-    // 2. Escribir el nuevo archivo
     await writeFile(path, buffer)
     const photoUrl = `/uploads/${fileName}`
 
-    // 3. Actualizar la base de datos
     const text = `UPDATE alumnos SET ${columnName} = $1 WHERE matricula = $2 RETURNING *;`
-    const values = [photoUrl, matricula]
-    await pool.query(text, values)
+    await pool.query(text, [photoUrl, matricula])
 
     return { success: true, photoUrl }
   } catch (error) {
@@ -88,11 +101,11 @@ export async function removeProfilePhoto(slot: 1 | 2 | 3) {
     if (currentRes.rows.length > 0) {
       const oldUrl = currentRes.rows[0][columnName]
       if (oldUrl && oldUrl.startsWith('/uploads/')) {
-        const oldFileName = oldUrl.replace('/uploads/', '')
-        const oldPath = join(uploadDir, oldFileName)
-        try { await unlink(oldPath) } catch (e) { }
+        try { await unlink(join(uploadDir, oldUrl.replace('/uploads/', ''))) } catch {}
       }
     }
+    // Borrar también el original guardado
+    try { await unlink(join(uploadDir, origFileName(matricula, slot))) } catch {}
 
     const text = `UPDATE alumnos SET ${columnName} = NULL WHERE matricula = $1;`
     await pool.query(text, [matricula])

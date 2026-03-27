@@ -256,7 +256,7 @@ export default function Home() {
           
           <div className="flex flex-col items-center">
             <h1 className="text-[22px] font-black tracking-tighter text-[#191c1d] leading-none">
-              UniConnect<span className="text-[#ba0034]">.</span>
+              Umatch<span className="text-[#ba0034]">.</span>
             </h1>
             <span className="text-[9px] font-bold tracking-[0.2em] text-[#916e6f] uppercase mt-1">The Pulse</span>
           </div>
@@ -405,7 +405,7 @@ export default function Home() {
         
         <div className="flex flex-col items-center">
           <h1 className="text-[22px] font-black tracking-tighter text-[#191c1d] leading-none">
-            UniConnect<span className="text-[#ba0034]">.</span>
+            Umatch<span className="text-[#ba0034]">.</span>
           </h1>
           <span className="text-[9px] font-bold tracking-[0.2em] text-[#916e6f] uppercase mt-1">The Pulse</span>
         </div>
